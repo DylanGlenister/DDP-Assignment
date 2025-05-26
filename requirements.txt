@@ -1,4 +1,5 @@
 scikit-learn
 ipykernel
-panadas
+pandas
 numpy
+matplotlib

@@ -1,3 +1,6 @@
+"""
+File for training machine learning models on acrhery scores.
+"""
 import warnings
 
 import matplotlib.pyplot as plt
@@ -50,7 +53,7 @@ class ArcheryRNN(nn.Module):
 		self,
 		_sequence_length: int,
 		_n_archers: int,
-		_model_type: str = 'lstm',
+		_model_type: str = shared.MODEL_TYPE_LSTM,
 		_hidden_dim: int = 64,
 		_n_layers: int = 2,
 		_dropout: float = 0.2,
@@ -70,13 +73,13 @@ class ArcheryRNN(nn.Module):
 		rnn_input_size = 1 + 32
 
 		# Create the appropriate model type
-		if self.model_type == 'lstm':
+		if self.model_type == shared.MODEL_TYPE_LSTM:
 			self.rnn = nn.LSTM(rnn_input_size, _hidden_dim, _n_layers,
 							  batch_first=True, dropout=_dropout if _n_layers > 1 else 0)
-		elif self.model_type == 'gru':
+		elif self.model_type == shared.MODEL_TYPE_GRU:
 			self.rnn = nn.GRU(rnn_input_size, _hidden_dim, _n_layers,
 							 batch_first=True, dropout=_dropout if _n_layers > 1 else 0)
-		elif self.model_type == 'transformer':
+		elif self.model_type == shared.MODEL_TYPE_TFMR:
 			d_model = self._adjust_d_model_for_heads(_hidden_dim, _n_heads)
 			self.input_projection = nn.Linear(rnn_input_size, d_model)
 			encoder_layer = nn.TransformerEncoderLayer(
@@ -110,10 +113,10 @@ class ArcheryRNN(nn.Module):
 		rnn_input = torch.cat([_x, archer_emb], dim=2)
 
 		# Forward pass through the selected architecture
-		if self.model_type in ['lstm', 'gru']:
+		if self.model_type in [shared.MODEL_TYPE_LSTM, shared.MODEL_TYPE_GRU]:
 			rnn_out, _ = self.rnn(rnn_input)
 			output = self.dropout(rnn_out[:, -1, :])
-		#elif self.model_type == 'transformer':
+		#elif self.model_type == shared.MODEL_TYPE_TFMR:
 		else:
 			projected_input = self.input_projection(rnn_input)
 			transformer_out = self.rnn(projected_input)
@@ -268,7 +271,7 @@ class ModelTrainer:
 class ArcheryPredictor:
 	"""Main class for archery score prediction with integrated load/train functionality"""
 
-	def __init__(self, _sequence_length: int = 12, _model_type: str = 'lstm'):
+	def __init__(self, _sequence_length: int = 12, _model_type: str = shared.MODEL_TYPE_LSTM):
 		self.sequence_length = _sequence_length
 		self.model_type = _model_type.lower()
 		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -290,17 +293,17 @@ class ArcheryPredictor:
 			_data_filepath = shared.PATH_DATASET
 
 		print('=' * 60)
-		print(f'Processing {self.model_type.upper()} Model')
+		print(f'Processing {shared.MODEL_DISPLAY_NAMES[self.model_type]} Model')
 		print('=' * 60)
 
 		# Try to load existing model unless forced to retrain
 		if not _force_retrain and self._load_model():
-			print(f'✓ Successfully loaded existing {self.model_type.upper()} model')
+			print(f'✓ Successfully loaded existing {shared.MODEL_DISPLAY_NAMES[self.model_type]} model')
 			print(f'Model ready for predictions. Archer count: {len(self.data_processor.archer_encoder.classes_)}')
 			return True
 
 		# Train new model
-		print(f'Training new {self.model_type.upper()} model...')
+		print(f'Training new {shared.MODEL_DISPLAY_NAMES[self.model_type]} model...')
 		return self._train_new_model(_data_filepath, **_train_params)
 
 	def _train_new_model(
@@ -312,7 +315,8 @@ class ArcheryPredictor:
 		_n_heads: int = 8,
 		_epochs: int = 50,
 		_batch_size: int = 64,
-		_test_size: float = 0.2
+		_test_size: float = 0.2,
+		_show_plot: bool = False
 	) -> bool:
 		"""Train a new model"""
 		try:
@@ -326,7 +330,7 @@ class ArcheryPredictor:
 				_hidden_dim, _n_layers, _dropout, _n_heads
 			).to(self.device)
 
-			print(f'Created {self.model_type.upper()} model with {sum(p.numel() for p in self.model.parameters())} parameters')
+			print(f'Created {shared.MODEL_DISPLAY_NAMES[self.model_type]} model with {sum(p.numel() for p in self.model.parameters())} parameters')
 
 			# Train model
 			self.trainer = ModelTrainer(self.model, self.device)
@@ -336,13 +340,14 @@ class ArcheryPredictor:
 
 			# Save and plot results
 			self._save_model()
-			self._plot_training_history(train_losses, test_losses)
+			if _show_plot:
+				self._plot_training_history(train_losses, test_losses)
 
-			print(f'✓ {self.model_type.upper()} model trained and saved successfully')
+			print(f'✓ {shared.MODEL_DISPLAY_NAMES[self.model_type]} model trained and saved successfully')
 			return True
 
 		except Exception as e:
-			print(f'✗ Error training {self.model_type.upper()} model: {e}')
+			print(f'✗ Error training {shared.MODEL_DISPLAY_NAMES[self.model_type]} model: {e}')
 			return False
 
 	def predict_score(self, _archer_id: int | str, _recent_scores: list[float] | None = None) -> float:
@@ -432,7 +437,7 @@ class ArcheryPredictor:
 		plt.figure(figsize=(10, 6))
 		plt.plot(_train_losses, label='Training Loss')
 		plt.plot(_test_losses, label='Validation Loss')
-		plt.title(f'{self.model_type.upper()} Model Training History')
+		plt.title(f'{shared.MODEL_DISPLAY_NAMES[self.model_type]} Model Training History')
 		plt.xlabel('Epoch')
 		plt.ylabel('Loss (MSE)')
 		plt.legend()
@@ -448,7 +453,7 @@ def main():
 	"""Main function demonstrating usage of all model types"""
 	models: dict[str, ArcheryPredictor] = {}
 
-	for model_type in ['lstm', 'gru', 'transformer']:
+	for model_type in shared.MODEL_TYPES:
 		predictor = ArcheryPredictor(_sequence_length=12, _model_type=model_type)
 
 		if predictor.load_or_train(_epochs=50, _batch_size=64):

@@ -1,4 +1,4 @@
-'''
+"""
 +========================================================+
 |                        Title                           |
 |                                                        |
@@ -15,7 +15,7 @@
 |  [Load previous scores] [Calculate score expectation]  |
 |                                                        |
 +--------------------------------------------------------+
-'''
+"""
 
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -58,9 +58,6 @@ class DataManager:
 class ModelManager:
 	"""Handles loading and managing prediction models."""
 
-	MODEL_TYPES = ['lstm', 'gru', 'transformer']
-	MODEL_DISPLAY_NAMES = {'lstm': 'LSTM', 'gru': 'GRU', 'transformer': 'TFMR'}
-
 	def __init__(self):
 		self.predictors: Dict[str, ml.ArcheryPredictor] = {}
 		self._load_all_models()
@@ -69,7 +66,7 @@ class ModelManager:
 		"""Load a single model of the specified type."""
 		try:
 			predictor = ml.ArcheryPredictor(_sequence_length=12, _model_type=_model_type)
-			if predictor.load_or_train(_force_retrain=False):
+			if predictor.load_or_train():
 				return predictor
 			else:
 				print(f'Failed to load {_model_type} model')
@@ -81,13 +78,13 @@ class ModelManager:
 	def _load_all_models(self):
 		"""Load all available models."""
 		print('Loading prediction models...')
-		for model_type in self.MODEL_TYPES:
-			print(f'Loading {model_type.upper()} model...')
+		for model_type in shared.MODEL_TYPES:
+			print(f'Loading {shared.MODEL_DISPLAY_NAMES[model_type]} model...')
 			self.predictors[model_type] = self._load_single_model(model_type)
 
 	def get_predictor(self, _model_display_name: str) -> ml.ArcheryPredictor:
-		"""Get predictor by display name (e.g., 'LSTM' -> lstm predictor)."""
-		model_type = next(k for k, v in self.MODEL_DISPLAY_NAMES.items() if v == _model_display_name)
+		"""Get predictor by display name (e.g., 'lstm' -> lstm predictor)."""
+		model_type = next(k for k, v in shared.MODEL_DISPLAY_NAMES.items() if v == _model_display_name)
 		predictor = self.predictors[model_type]
 		if predictor is None:
 			raise ValueError(f'Model {_model_display_name} not available')
@@ -95,8 +92,7 @@ class ModelManager:
 
 	def get_display_names(self) -> List[str]:
 		"""Get list of available model display names."""
-		return [name for key, name in self.MODEL_DISPLAY_NAMES.items()
-				if self.predictors[key] is not None]
+		return [name for key, name in shared.MODEL_DISPLAY_NAMES.items() if self.predictors[key] is not None]
 
 	@property
 	def all_loaded(self) -> bool:

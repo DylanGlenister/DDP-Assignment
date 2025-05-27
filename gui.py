@@ -35,12 +35,12 @@ import machine_learning as ml
 import shared
 
 # Load and process CSV data at startup
-archer_data = pd.read_csv(shared.PATH_DATASET)
+data = pd.read_csv(shared.PATH_DATASET)
 # Convert Date column to datetime
-archer_data['Date'] = pd.to_datetime(archer_data['Date'])
+data['Date'] = pd.to_datetime(data['Date'])
 # Get unique archer IDs
-archer_ids = sorted(archer_data['ArcherID'].unique())
-print(f'Loaded data for {len(archer_ids)} archers with {len(archer_data)} total records')
+archer_ids = sorted(data['ArcherID'].unique())
+print(f'Loaded data for {len(archer_ids)} archers with {len(data)} total records')
 
 # Initialize model predictors
 lstm_predictor = None
@@ -155,15 +155,15 @@ def update_status(message, color='blue'):
 
 def get_recent_scores(archer_id, sequence_length=12):
 	'''Get the most recent scores for an archer'''
-	global archer_data
+	global data
 
-	archer_data = archer_data[archer_data['ArcherID'] == archer_id].sort_values('Date')
+	archer_data = data[data['ArcherID'] == archer_id].sort_values('Date')
 	recent_scores = archer_data['ScoreFraction'].tail(sequence_length).tolist()
 
 	return recent_scores
 
 def load():
-	global archer_data
+	global data
 
 	try:
 		update_status('Loading historical scores...')
@@ -174,16 +174,16 @@ def load():
 		# Plot data for selected archer
 		plot1 = fig.add_subplot(111)
 
-		selected_archer = archer_combo.get()
-		if selected_archer:
-			selected_archer = int(selected_archer)
-			archer_data = archer_data[archer_data['ArcherID'] == selected_archer].sort_values('Date')
+		selected_archer_str = archer_combo.get()
+		if selected_archer_str:
+			selected_archer = int(selected_archer_str)
+			archer_data = data[data['ArcherID'] == selected_archer].sort_values('Date')
 			plot1.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-',
 					  color='blue', label=f'Archer {selected_archer} - Historical')
 		else:
 			# Plot for first archer if none selected
 			first_archer = archer_ids[0] if archer_ids else 0
-			archer_data = archer_data[archer_data['ArcherID'] == first_archer].sort_values('Date')
+			archer_data = data[data['ArcherID'] == first_archer].sort_values('Date')
 			plot1.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-',
 					  color='blue', label=f'Archer {first_archer} - Historical')
 
@@ -207,14 +207,14 @@ def load():
 		update_status(error_msg, 'red')
 
 def calculate():
-	global archer_data, lstm_predictor, gru_predictor, transformer_predictor
+	global data, lstm_predictor, gru_predictor, transformer_predictor
 
-	selected_archer = archer_combo.get()
+	selected_archer_str = archer_combo.get()
 	selected_model = model_combo.get()
 
 	update_status('Calculating prediction...')
 
-	selected_archer = int(selected_archer)
+	selected_archer = int(selected_archer_str)
 
 	# Get recent scores for the selected archer
 	recent_scores = get_recent_scores(selected_archer)
@@ -247,17 +247,39 @@ def calculate():
 	plot1 = fig.add_subplot(111)
 
 	# Plot historical data
-	archer_data = archer_data[archer_data['ArcherID'] == selected_archer].sort_values('Date')
-	plot1.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-', color='blue', label=f'Archer {selected_archer} - Historical', linewidth=2)
+	archer_data = data[data['ArcherID'] == selected_archer].sort_values('Date')
+	plot1.plot(
+		archer_data['Date'],
+		archer_data['ScoreFraction'],
+		'o-',
+		color='blue',
+		label=f'Archer {selected_archer} - Historical',
+		linewidth=2
+	)
 
 	# Plot prediction point
 	current_date = datetime.now()
-	plot1.plot([current_date], [predicted_score], 'o', color='red', markersize=12, label=f'Predicted Score ({selected_model})', zorder=5)
+	plot1.plot(
+		[current_date],
+		[predicted_score],
+		'o',
+		color='red',
+		markersize=12,
+		label=f'Predicted Score ({selected_model})',
+		zorder=5
+	)
 
 	# Add a dashed line connecting the last historical point to the prediction
 	last_date = archer_data['Date'].iloc[-1]
 	last_score = archer_data['ScoreFraction'].iloc[-1]
-	plot1.plot([last_date, current_date], [last_score, predicted_score], '--', color='red', alpha=0.7, linewidth=2)
+	plot1.plot(
+		[last_date, current_date],
+		[last_score, predicted_score],
+		'--',
+		color='red',
+		alpha=0.7,
+		linewidth=2
+	)
 
 	# Add text annotation for the predicted value
 	plot1.annotate(

@@ -9,15 +9,9 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from torch.utils.data import DataLoader, Dataset
+import shared
 
 warnings.filterwarnings('ignore')
-
-PATH_DATASET = './data.csv'
-
-# Column names for the archery dataset
-COLUMN_ARCHER_ID = 'ArcherID'
-COLUMN_DATE = 'Date'
-COLUMN_SCORE = 'Score'
 
 # Set random seeds for reproducibility
 torch.manual_seed(42)
@@ -151,20 +145,21 @@ class ArcheryPredictor:
 
 		print(f'Using device: {self.device}')
 
-	def load_and_preprocess_data(self, _filepath=PATH_DATASET):
+	def load_and_preprocess_data(self, _filepath=shared.PATH_DATASET):
 		'''Load and preprocess the archery data'''
 		print('Loading data...')
 		df = pd.read_csv(_filepath)
 
 		# Convert date to datetime for proper sorting
-		df[COLUMN_DATE] = pd.to_datetime(df[COLUMN_DATE])
+		df[shared.COLUMN_DATE] = pd.to_datetime(df[shared.COLUMN_DATE])
 
 		# Sort by archer and date to ensure chronological order
-		df = df.sort_values([COLUMN_ARCHER_ID, COLUMN_DATE])
+		df = df.sort_values([shared.COLUMN_ARCHER_ID, shared.COLUMN_DATE])
 
 		print(f'Data shape: {df.shape}')
-		print(f'Unique archers: {df[COLUMN_ARCHER_ID].nunique()}')
-		print(f'Date range: {df[COLUMN_DATE].min()} to {df[COLUMN_DATE].max()}')
+		print(f'Unique archers: {df[shared.COLUMN_ARCHER_ID].nunique()}')
+		print(f'Date range: {df[shared.COLUMN_DATE].min()} to {df[shared.COLUMN_DATE].max()}')
+		print(f'Score range: {df[shared.COLUMN_SCORE].min():.4f} to {df[shared.COLUMN_SCORE].max():.4f}')
 
 		return df
 
@@ -177,12 +172,13 @@ class ArcheryPredictor:
 		archer_list = []
 
 		# Group by archer to create sequences
-		for archer_id, group in _df.groupby(COLUMN_ARCHER_ID):
+		for archer_id, group in _df.groupby(shared.COLUMN_ARCHER_ID):
 			# Get scores in chronological order
-			scores = group[COLUMN_SCORE].values.astype(float)
+			scores = group[shared.COLUMN_SCORE].values.astype(float)
 
 			# Skip archers with insufficient data
 			if len(scores) <= self.sequence_length:
+				print(f'Skipping archer {archer_id}: only {len(scores)} scores (need >{self.sequence_length})')
 				continue
 
 			# Create sequences for this archer
@@ -197,7 +193,7 @@ class ArcheryPredictor:
 		print(f'Created {len(sequences)} sequences from {len(set(archer_list))} archers')
 		return np.array(sequences), np.array(targets), archer_list
 
-	def prepare_data(self, _filepath=PATH_DATASET, _test_size=0.2):
+	def prepare_data(self, _filepath=shared.PATH_DATASET, _test_size=0.2):
 		'''Prepare data for training'''
 		# Load data
 		df = self.load_and_preprocess_data(_filepath)
@@ -317,7 +313,7 @@ class ArcheryPredictor:
 			recent_scores: List of recent scores for sequence (optional)
 
 		Returns:
-			Predicted score
+			Predicted score fraction (between 0 and 1)
 		'''
 		if self.model is None:
 			raise ValueError('Cannot predict, model has not been set')
@@ -333,11 +329,12 @@ class ArcheryPredictor:
 		# If recent_scores not provided, use dummy sequence (this is not ideal for real prediction)
 		if _recent_scores is None:
 			print('Warning: No recent score data provided. Using dummy sequence.')
-			_recent_scores = [0.0] * self.sequence_length
+			_recent_scores = [0.7] * self.sequence_length  # Use 0.7 as a reasonable default for score fractions
 
 		if len(_recent_scores) < self.sequence_length:
-			# Pad with zeros if not enough data
-			_recent_scores = [0.0] * (self.sequence_length - len(_recent_scores)) + list(_recent_scores)
+			# Pad with the mean of existing scores if not enough data
+			mean_score = np.mean(_recent_scores) if _recent_scores else 0.7
+			_recent_scores = [mean_score] * (self.sequence_length - len(_recent_scores)) + list(_recent_scores)
 		elif len(_recent_scores) > self.sequence_length:
 			# Take the last sequence_length values
 			_recent_scores = _recent_scores[-self.sequence_length:]
@@ -356,12 +353,13 @@ class ArcheryPredictor:
 		# Inverse transform using target_scaler to get actual score
 		prediction = self.target_scaler.inverse_transform([[prediction_scaled.cpu().item()]])[0][0]
 
-		return max(0, prediction)  # Ensure non-negative score
+		# Clamp between 0 and 1 for score fractions
+		return max(0.0, min(1.0, prediction))
 
 	def save_model(self, _filepath=None):
 		'''Save the trained model and preprocessors'''
 		if _filepath is None:
-			_filepath = f'archery_{self.model_type}_model.pt'
+			_filepath = f'{shared.PATH_MODELS}archery_{self.model_type}_model.pt'
 
 		if self.model is None:
 			raise ValueError('No model to save. Train a model first.')
@@ -388,7 +386,7 @@ class ArcheryPredictor:
 	def load_model(self, _filepath=None):
 		'''Load a trained model and preprocessors'''
 		if _filepath is None:
-			_filepath = f'archery_{self.model_type}_model.pt'
+			_filepath = f'{shared.PATH_MODELS}archery_{self.model_type}_model.pt'
 
 		try:
 			checkpoint = torch.load(_filepath, map_location=self.device, weights_only=False)
@@ -472,7 +470,7 @@ def main():
 
 			try:
 				# Prepare data
-				train_dataset, test_dataset = predictor.prepare_data(PATH_DATASET)
+				train_dataset, test_dataset = predictor.prepare_data(shared.PATH_DATASET)
 
 				# Create and train model
 				predictor.create_model(_hidden_dim=64, _n_layers=2, _dropout=0.2)
@@ -492,7 +490,7 @@ def main():
 				print(f'✓ {model_type.upper()} model trained and saved successfully')
 
 			except FileNotFoundError:
-				print(f'✗ Error: Data file not found at {PATH_DATASET}. Please ensure the data file exists.')
+				print(f'✗ Error: Data file not found at {shared.PATH_DATASET}. Please ensure the data file exists.')
 				return None
 			except Exception as e:
 				print(f'✗ Error training {model_type.upper()} model: {e}')
@@ -519,8 +517,8 @@ def main():
 		print('\nTo make predictions, use:')
 		print('predictor.predict_score(archer_id, recent_scores)')
 		print('\nExample:')
-		print('recent_scores = [85, 87, 82, 89, 91, 88, 86, 90, 93, 87, 89, 92]')
-		print('prediction = predictor.predict_score("archer_123", recent_scores)')
+		print('recent_scores = [0.85, 0.87, 0.82, 0.89, 0.91, 0.88, 0.86, 0.90, 0.93, 0.87, 0.89, 0.92]')
+		print('prediction = predictor.predict_score(0, recent_scores)')
 
 		# Show available archers if models are loaded
 		try:
@@ -528,6 +526,26 @@ def main():
 				print(f'\nAvailable Archers ({len(lstm_predictor.archer_encoder.classes_)}): {list(lstm_predictor.archer_encoder.classes_[:10])}{"..." if len(lstm_predictor.archer_encoder.classes_) > 10 else ""}')
 		except:
 			pass
+
+		# Demonstrate prediction with actual data from your sample
+		if lstm_predictor is not None:
+			try:
+				print('\n' + '=' * 40)
+				print('Sample Prediction Demonstration')
+				print('=' * 40)
+
+				# Use the first 12 scores from your sample data as an example
+				sample_scores = [0.7615573632329024, 0.6122834217765443, 0.7433769949815001,
+								0.7108834281844016, 0.7174447752290504, 0.6029931475517498,
+								0.8136260904112261, 0.742366237718169, 0.6288655285771527,
+								0.7277966117076704, 0.5661138417053742, 0.6897291459339614]
+
+				prediction = lstm_predictor.predict_score(0, sample_scores)
+				print(f'Predicted next score for Archer 0: {prediction:.4f}')
+				print(f'(Based on 12 recent scores ranging from {min(sample_scores):.4f} to {max(sample_scores):.4f})')
+
+			except Exception as e:
+				print(f'Could not demonstrate prediction: {e}')
 
 	return lstm_predictor, gru_predictor, transformer_predictor
 

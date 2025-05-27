@@ -9,6 +9,7 @@ import torch.optim as optim
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from torch.utils.data import DataLoader, Dataset
+
 import shared
 
 warnings.filterwarnings('ignore')
@@ -20,140 +21,120 @@ np.random.seed(42)
 class ArcheryDataset(Dataset):
 	'''Custom dataset for archery score prediction'''
 
-	def __init__(self, _features, _targets, _archer_encoded):
-		self.features = torch.FloatTensor(_features)
-		self.targets = torch.FloatTensor(_targets)
-		self.archer_encoded = torch.LongTensor(_archer_encoded)
+	def __init__(self, features, targets, archer_encoded):
+		self.features = torch.FloatTensor(features)
+		self.targets = torch.FloatTensor(targets)
+		self.archer_encoded = torch.LongTensor(archer_encoded)
 
 	def __len__(self):
 		return len(self.features)
 
-	def __getitem__(self, _idx):
+	def __getitem__(self, idx):
 		return {
-			'features': self.features[_idx],
-			'targets': self.targets[_idx],
-			'archer': self.archer_encoded[_idx]
+			'features': self.features[idx],
+			'targets': self.targets[idx],
+			'archer': self.archer_encoded[idx]
 		}
 
 class ArcheryRNN(nn.Module):
-	'''Unified RNN model supporting LSTM, GRU, and Transformer architectures for archery score prediction'''
+	'''Unified RNN model supporting LSTM, GRU, and Transformer architectures'''
 
-	def __init__(self, _sequence_length, _n_archers, _model_type='lstm',
-				 _hidden_dim=64, _n_layers=2, _dropout=0.2, _n_heads=8):
-		super(ArcheryRNN, self).__init__()
+	def __init__(
+		self,
+		sequence_length,
+		n_archers,
+		model_type='lstm',
+		hidden_dim=64,
+		n_layers=2,
+		dropout=0.2,
+		n_heads=8
+	):
+		super().__init__()
 
-		self.hidden_dim = _hidden_dim
-		self.n_layers = _n_layers
-		self.sequence_length = _sequence_length
-		self.model_type = _model_type.lower()
+		self.hidden_dim = hidden_dim
+		self.n_layers = n_layers
+		self.sequence_length = sequence_length
+		self.model_type = model_type.lower()
 
 		# Embedding layer for archer ID
-		self.archer_embedding = nn.Embedding(_n_archers, 32)
+		self.archer_embedding = nn.Embedding(n_archers, 32)
 
 		# RNN input size: score + archer embedding
-		rnn_input_size = 1 + 32  # score + archer_emb = 33
+		rnn_input_size = 1 + 32
 
 		# Create the appropriate model type
 		if self.model_type == 'lstm':
-			self.rnn = nn.LSTM(rnn_input_size, _hidden_dim, _n_layers,
-							  batch_first=True, dropout=_dropout if _n_layers > 1 else 0)
+			self.rnn = nn.LSTM(rnn_input_size,
+			hidden_dim,
+			n_layers,
+			batch_first=True,
+			dropout=dropout if n_layers > 1 else 0
+		)
 		elif self.model_type == 'gru':
-			self.rnn = nn.GRU(rnn_input_size, _hidden_dim, _n_layers,
-							 batch_first=True, dropout=_dropout if _n_layers > 1 else 0)
+			self.rnn = nn.GRU(rnn_input_size,
+			hidden_dim,
+			n_layers,
+			batch_first=True,
+			dropout=dropout if n_layers > 1 else 0
+		)
 		elif self.model_type == 'transformer':
-			# For transformer, we need d_model to be divisible by n_heads
-			d_model = _hidden_dim
-
-			# Ensure d_model is divisible by n_heads
-			if d_model % _n_heads != 0:
-				# Adjust d_model to be divisible by n_heads
-				d_model = ((d_model // _n_heads) + 1) * _n_heads
-				print(f'Adjusted d_model to {d_model} to be divisible by {_n_heads} heads')
-
-			# Project input to d_model dimensions
+			d_model = self._adjust_d_model_for_heads(hidden_dim, n_heads)
 			self.input_projection = nn.Linear(rnn_input_size, d_model)
-
-			# Transformer encoder layer
 			encoder_layer = nn.TransformerEncoderLayer(
 				d_model=d_model,
-				nhead=_n_heads,
+				nhead=n_heads,
 				dim_feedforward=d_model * 2,
-				dropout=_dropout,
+				dropout=dropout,
 				batch_first=True
 			)
-			self.rnn = nn.TransformerEncoder(encoder_layer, num_layers=_n_layers)
-			# Update hidden_dim to match d_model for consistency
+			self.rnn = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
 			self.hidden_dim = d_model
-		else:
-			raise ValueError(f'model_type must be "lstm", "gru", or "transformer"')
 
 		# Output layers
-		self.dropout = nn.Dropout(_dropout)
+		self.dropout = nn.Dropout(dropout)
 		self.fc = nn.Linear(self.hidden_dim, 1)
 
-	def forward(self, _x, _archer):
-		# Get archer embedding
-		archer_emb = self.archer_embedding(_archer)  # (batch_size, 32)
+	def _adjust_d_model_for_heads(self, hidden_dim, n_heads):
+		'''Adjust d_model to be divisible by n_heads'''
+		if hidden_dim % n_heads != 0:
+			d_model = ((hidden_dim // n_heads) + 1) * n_heads
+			print(f'Adjusted d_model to {d_model} to be divisible by {n_heads} heads')
+			return d_model
+		return hidden_dim
 
-		# Expand archer embedding to match sequence length
+	def forward(self, x, archer):
+		# Get archer embedding and expand to sequence length
+		archer_emb = self.archer_embedding(archer)
 		archer_emb = archer_emb.unsqueeze(1).repeat(1, self.sequence_length, 1)
 
 		# Concatenate score sequence with archer embedding
-		rnn_input = torch.cat([_x, archer_emb], dim=2)
-
-		output = None
+		rnn_input = torch.cat([x, archer_emb], dim=2)
 
 		# Forward pass through the selected architecture
 		if self.model_type in ['lstm', 'gru']:
 			rnn_out, _ = self.rnn(rnn_input)
-			# Use the last output for prediction
 			output = self.dropout(rnn_out[:, -1, :])
 		elif self.model_type == 'transformer':
-			# Project input to d_model dimensions
 			projected_input = self.input_projection(rnn_input)
-			# Transformer doesn't need hidden states
 			transformer_out = self.rnn(projected_input)
-			# Use the last output
 			output = self.dropout(transformer_out[:, -1, :])
 
-		if output is None:
-			raise TypeError('Error failure trying to set forward output')
+		return self.fc(output)
 
-		output = self.fc(output)
-		return output
+class DataProcessor:
+	'''Handles data loading and preprocessing'''
 
-class ArcheryPredictor:
-	'''Main class for archery score prediction'''
-
-	def __init__(self, _sequence_length=12, _model_type='lstm'):
-		self.sequence_length = _sequence_length
-		self.model_type = _model_type.lower()
-		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-		# Preprocessing objects
+	def __init__(self, sequence_length=12):
+		self.sequence_length = sequence_length
 		self.sequence_scaler = StandardScaler()
 		self.target_scaler = StandardScaler()
 		self.archer_encoder = LabelEncoder()
 
-		# Model and training objects
-		self.model = None
-		self.optimizer = None
-		self.criterion = nn.MSELoss()
-
-		# Model dimensions (will be set during data preparation or loading)
-		self.n_archers = None
-
-		print(f'Using device: {self.device}')
-
-	def load_and_preprocess_data(self, _filepath=shared.PATH_DATASET):
+	def load_data(self, filepath):
 		'''Load and preprocess the archery data'''
 		print('Loading data...')
-		df = pd.read_csv(_filepath)
-
-		# Convert date to datetime for proper sorting
+		df = pd.read_csv(filepath)
 		df[shared.COLUMN_DATE] = pd.to_datetime(df[shared.COLUMN_DATE])
-
-		# Sort by archer and date to ensure chronological order
 		df = df.sort_values([shared.COLUMN_ARCHER_ID, shared.COLUMN_DATE])
 
 		print(f'Data shape: {df.shape}')
@@ -163,61 +144,45 @@ class ArcheryPredictor:
 
 		return df
 
-	def create_sequences(self, _df):
+	def create_sequences(self, df):
 		'''Create sequences for training'''
 		print('Creating sequences...')
-
 		sequences = []
 		targets = []
 		archer_list = []
 
-		# Group by archer to create sequences
-		for archer_id, group in _df.groupby(shared.COLUMN_ARCHER_ID):
-			# Get scores in chronological order
+		for archer_id, group in df.groupby(shared.COLUMN_ARCHER_ID):
 			scores = group[shared.COLUMN_SCORE].values.astype(float)
 
-			# Skip archers with insufficient data
 			if len(scores) <= self.sequence_length:
 				print(f'Skipping archer {archer_id}: only {len(scores)} scores (need >{self.sequence_length})')
 				continue
 
-			# Create sequences for this archer
 			for i in range(len(scores) - self.sequence_length):
-				seq = scores[i:i + self.sequence_length]
-				target = scores[i + self.sequence_length]
-
-				sequences.append(seq)
-				targets.append(target)
+				sequences.append(scores[i:i + self.sequence_length])
+				targets.append(scores[i + self.sequence_length])
 				archer_list.append(archer_id)
 
 		print(f'Created {len(sequences)} sequences from {len(set(archer_list))} archers')
 		return np.array(sequences), np.array(targets), archer_list
 
-	def prepare_data(self, _filepath=shared.PATH_DATASET, _test_size=0.2):
+	def prepare_data(self, filepath, test_size=0.2):
 		'''Prepare data for training'''
-		# Load data
-		df = self.load_and_preprocess_data(_filepath)
-
-		# Create sequences
+		df = self.load_data(filepath)
 		sequences, targets, archer_list = self.create_sequences(df)
 
-		if len(sequences) == 0:
-			raise ValueError('No sequences created. Check that archers have sufficient historical data.')
-
-		# Encode archer IDs
+		# Encode and scale data
 		archer_encoded = self.archer_encoder.fit_transform(archer_list)
-
-		# Scale the sequences and targets separately
 		sequences_scaled = self.sequence_scaler.fit_transform(sequences)
 		targets_scaled = self.target_scaler.fit_transform(targets.reshape(-1, 1)).flatten()
 
-		# Split data, stratifying by archer to ensure balanced representation
+		# Split data
 		X_train, X_test, y_train, y_test, archer_train, archer_test = train_test_split(
 			sequences_scaled, targets_scaled, archer_encoded,
-			test_size=_test_size, random_state=42, stratify=archer_encoded
+			test_size=test_size, random_state=42, stratify=archer_encoded
 		)
 
-		# Reshape for RNN input (batch_size, sequence_length, features)
+		# Reshape for RNN input
 		X_train = X_train.reshape(-1, self.sequence_length, 1)
 		X_test = X_test.reshape(-1, self.sequence_length, 1)
 
@@ -225,210 +190,225 @@ class ArcheryPredictor:
 		train_dataset = ArcheryDataset(X_train, y_train, archer_train)
 		test_dataset = ArcheryDataset(X_test, y_test, archer_test)
 
-		self.n_archers = len(self.archer_encoder.classes_)
-
 		print(f'Training samples: {len(train_dataset)}')
 		print(f'Test samples: {len(test_dataset)}')
-		print(f'Number of archers: {self.n_archers}')
+		print(f'Number of archers: {len(self.archer_encoder.classes_)}')
 
 		return train_dataset, test_dataset
 
-	def create_model(self, _hidden_dim=64, _n_layers=2, _dropout=0.2, _n_heads=8):
-		'''Create LSTM, GRU, or Transformer model'''
-		self.model = ArcheryRNN(
-			self.sequence_length, self.n_archers,
-			self.model_type, _hidden_dim, _n_layers, _dropout, _n_heads
-		)
+class ModelTrainer:
+	'''Handles model training and evaluation'''
 
-		self.model = self.model.to(self.device)
-		self.optimizer = optim.Adam(self.model.parameters(), lr=0.001)
+	def __init__(self, model, device):
+		self.model = model
+		self.device = device
+		self.optimizer = optim.Adam(model.parameters(), lr=0.001)
+		self.criterion = nn.MSELoss()
 
-		print(f'Created {self.model_type.upper()} model with {sum(p.numel() for p in self.model.parameters())} parameters')
-
-	def train(self, _train_dataset, _test_dataset, _epochs=100, _batch_size=64):
+	def train(self, train_dataset, test_dataset, epochs=100, batch_size=64):
 		'''Train the model'''
-		train_loader = DataLoader(_train_dataset, batch_size=_batch_size, shuffle=True)
-		test_loader = DataLoader(_test_dataset, batch_size=_batch_size, shuffle=False)
+		train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+		test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-		train_losses: list[float] = []
-		test_losses: list[float] = []
+		train_losses = []
+		test_losses = []
 
-		if self.model is None:
-			raise ValueError('Cannot train, model has not been set')
+		print(f'Training model...')
 
-		if self.optimizer is None:
-			raise ValueError('Cannot train, optimizer has not been set')
-
-		print(f'Training {self.model_type.upper()} model...')
-
-		for epoch in range(_epochs):
-			# Training
+		for epoch in range(epochs):
+			# Training phase
 			self.model.train()
-			train_loss: float = 0
+			train_loss = self._run_epoch(train_loader, training=True)
 
-			for batch in train_loader:
-				features = batch['features'].to(self.device)
-				targets = batch['targets'].to(self.device)
-				archer = batch['archer'].to(self.device)
-
-				self.optimizer.zero_grad()
-				outputs = self.model(features, archer)
-				loss = self.criterion(outputs.squeeze(), targets)
-				loss.backward()
-				self.optimizer.step()
-
-				train_loss += loss.item()
-
-			# Validation
+			# Validation phase
 			self.model.eval()
-			test_loss: float = 0
-
 			with torch.no_grad():
-				for batch in test_loader:
-					features = batch['features'].to(self.device)
-					targets = batch['targets'].to(self.device)
-					archer = batch['archer'].to(self.device)
-
-					outputs = self.model(features, archer)
-					loss = self.criterion(outputs.squeeze(), targets)
-					test_loss += loss.item()
-
-			train_loss /= len(train_loader)
-			test_loss /= len(test_loader)
+				test_loss = self._run_epoch(test_loader, training=False)
 
 			train_losses.append(train_loss)
 			test_losses.append(test_loss)
 
 			if (epoch + 1) % 10 == 0:
-				print(f'Epoch [{epoch+1}/{_epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
+				print(f'Epoch [{epoch+1}/{epochs}], Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}')
 
 		return train_losses, test_losses
 
-	def predict_score(self, _archer_id, _recent_scores=None):
-		'''
-		Predict next score for a given archer
+	def _run_epoch(self, data_loader, training=True):
+		'''Run a single epoch'''
+		total_loss = 0
 
-		Args:
-			archer_id: Archer identifier
-			recent_scores: List of recent scores for sequence (optional)
+		for batch in data_loader:
+			features = batch['features'].to(self.device)
+			targets = batch['targets'].to(self.device)
+			archer = batch['archer'].to(self.device)
 
-		Returns:
-			Predicted score fraction (between 0 and 1)
-		'''
-		if self.model is None:
-			raise ValueError('Cannot predict, model has not been set')
+			if training:
+				self.optimizer.zero_grad()
 
+			outputs = self.model(features, archer)
+			loss = self.criterion(outputs.squeeze(), targets)
+
+			if training:
+				loss.backward()
+				self.optimizer.step()
+
+			total_loss += loss.item()
+
+		return total_loss / len(data_loader)
+
+class ArcheryPredictor:
+	'''Main class for archery score prediction with integrated load/train functionality'''
+
+	def __init__(self, sequence_length=12, model_type='lstm'):
+		self.sequence_length = sequence_length
+		self.model_type = model_type.lower()
+		self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+		self.data_processor = DataProcessor(sequence_length)
+		self.model = None
+		self.trainer = None
+
+		print(f'Using device: {self.device}')
+
+	def load_or_train(self, data_filepath=None, force_retrain=False, **train_params):
+		'''Load existing model or train a new one if loading fails'''
+		if data_filepath is None:
+			data_filepath = shared.PATH_DATASET
+
+		print('=' * 60)
+		print(f'Processing {self.model_type.upper()} Model')
+		print('=' * 60)
+
+		# Try to load existing model unless forced to retrain
+		if not force_retrain and self._load_model():
+			print(f'✓ Successfully loaded existing {self.model_type.upper()} model')
+			print(f'Model ready for predictions. Archer count: {len(self.data_processor.archer_encoder.classes_)}')
+			return True
+
+		# Train new model
+		print(f'Training new {self.model_type.upper()} model...')
+		return self._train_new_model(data_filepath, **train_params)
+
+	def _train_new_model(self, data_filepath, hidden_dim=64, n_layers=2, dropout=0.2,
+						n_heads=8, epochs=50, batch_size=64, test_size=0.2):
+		'''Train a new model'''
+		try:
+			# Prepare data
+			train_dataset, test_dataset = self.data_processor.prepare_data(data_filepath, test_size)
+
+			# Create model
+			n_archers = len(self.data_processor.archer_encoder.classes_)
+			self.model = ArcheryRNN(
+				self.sequence_length, n_archers, self.model_type,
+				hidden_dim, n_layers, dropout, n_heads
+			).to(self.device)
+
+			print(f'Created {self.model_type.upper()} model with {sum(p.numel() for p in self.model.parameters())} parameters')
+
+			# Train model
+			self.trainer = ModelTrainer(self.model, self.device)
+			train_losses, test_losses = self.trainer.train(
+				train_dataset, test_dataset, epochs, batch_size
+			)
+
+			# Save and plot results
+			self._save_model()
+			self._plot_training_history(train_losses, test_losses)
+
+			print(f'✓ {self.model_type.upper()} model trained and saved successfully')
+			return True
+
+		except Exception as e:
+			print(f'✗ Error training {self.model_type.upper()} model: {e}')
+			return False
+
+	def predict_score(self, archer_id, recent_scores=None):
+		'''Predict next score for a given archer'''
 		self.model.eval()
 
 		# Encode archer ID
-		try:
-			archer_encoded = self.archer_encoder.transform([_archer_id])[0]
-		except ValueError as e:
-			raise ValueError(f'Unknown archer ID: {e}')
+		archer_encoded = self.data_processor.archer_encoder.transform([archer_id])[0]
 
-		# If recent_scores not provided, use dummy sequence (this is not ideal for real prediction)
-		if _recent_scores is None:
+		# Prepare recent scores
+		if recent_scores is None:
 			print('Warning: No recent score data provided. Using dummy sequence.')
-			_recent_scores = [0.7] * self.sequence_length  # Use 0.7 as a reasonable default for score fractions
+			recent_scores = [0.7] * self.sequence_length
 
-		if len(_recent_scores) < self.sequence_length:
-			# Pad with the mean of existing scores if not enough data
-			mean_score = np.mean(_recent_scores) if _recent_scores else 0.7
-			_recent_scores = [mean_score] * (self.sequence_length - len(_recent_scores)) + list(_recent_scores)
-		elif len(_recent_scores) > self.sequence_length:
-			# Take the last sequence_length values
-			_recent_scores = _recent_scores[-self.sequence_length:]
+		recent_scores = self._prepare_score_sequence(recent_scores)
 
-		# Scale the input sequence using sequence_scaler
-		sequence_scaled = self.sequence_scaler.transform([_recent_scores])
-
-		# Prepare input tensors
+		# Scale and predict
+		sequence_scaled = self.data_processor.sequence_scaler.transform([recent_scores])
 		features = torch.FloatTensor(sequence_scaled).reshape(1, self.sequence_length, 1).to(self.device)
 		archer_tensor = torch.LongTensor([archer_encoded]).to(self.device)
 
-		# Make prediction
 		with torch.no_grad():
 			prediction_scaled = self.model(features, archer_tensor)
 
-		# Inverse transform using target_scaler to get actual score
-		prediction = self.target_scaler.inverse_transform([[prediction_scaled.cpu().item()]])[0][0]
-
-		# Clamp between 0 and 1 for score fractions
+		# Inverse transform and clamp
+		prediction = self.data_processor.target_scaler.inverse_transform([[prediction_scaled.cpu().item()]])[0][0]
 		return max(0.0, min(1.0, prediction))
 
-	def save_model(self, _filepath=None):
-		'''Save the trained model and preprocessors'''
-		if _filepath is None:
-			_filepath = f'{shared.PATH_MODELS}archery_{self.model_type}_model.pt'
+	def _prepare_score_sequence(self, recent_scores):
+		'''Prepare score sequence for prediction'''
+		if len(recent_scores) < self.sequence_length:
+			mean_score = np.mean(recent_scores) if recent_scores else 0.7
+			padding = [mean_score] * (self.sequence_length - len(recent_scores))
+			return padding + list(recent_scores)
+		elif len(recent_scores) > self.sequence_length:
+			return recent_scores[-self.sequence_length:]
+		return recent_scores
 
-		if self.model is None:
-			raise ValueError('No model to save. Train a model first.')
-
+	def _save_model(self):
+		'''Save the trained model'''
+		filepath = f'{shared.PATH_MODELS}archery_{self.model_type}_model.pt'
 		checkpoint = {
 			'model_state_dict': self.model.state_dict(),
-			'optimizer_state_dict': self.optimizer.state_dict() if self.optimizer else None,
-			'sequence_scaler': self.sequence_scaler,
-			'target_scaler': self.target_scaler,
-			'archer_encoder': self.archer_encoder,
+			'optimizer_state_dict': self.trainer.optimizer.state_dict(),
+			'data_processor': self.data_processor,
 			'sequence_length': self.sequence_length,
 			'model_type': self.model_type,
-			'n_archers': self.n_archers,
 			'model_params': {
 				'hidden_dim': self.model.hidden_dim,
 				'n_layers': self.model.n_layers,
-				'n_heads': getattr(self.model, 'n_heads', 8)  # Default for non-transformer models
+				'n_heads': getattr(self.model, 'n_heads', 8)
 			}
 		}
+		torch.save(checkpoint, filepath)
+		print(f'Model saved to {filepath}')
 
-		torch.save(checkpoint, _filepath)
-		print(f'Model saved to {_filepath}')
-
-	def load_model(self, _filepath=None):
-		'''Load a trained model and preprocessors'''
-		if _filepath is None:
-			_filepath = f'{shared.PATH_MODELS}archery_{self.model_type}_model.pt'
-
+	def _load_model(self):
+		'''Load a trained model'''
+		filepath = f'{shared.PATH_MODELS}archery_{self.model_type}_model.pt'
 		try:
-			checkpoint = torch.load(_filepath, map_location=self.device, weights_only=False)
+			checkpoint = torch.load(filepath, map_location=self.device, weights_only=False)
 
-			# Load preprocessors
-			self.sequence_scaler = checkpoint['sequence_scaler']
-			self.target_scaler = checkpoint['target_scaler']
-			self.archer_encoder = checkpoint['archer_encoder']
-			self.sequence_length = checkpoint['sequence_length']
-			self.n_archers = checkpoint['n_archers']
-
-			# Recreate model with saved parameters
+			# Restore data processor and model parameters
+			self.data_processor = checkpoint['data_processor']
 			model_params = checkpoint['model_params']
-			self.create_model(
-				_hidden_dim=model_params['hidden_dim'],
-				_n_layers=model_params['n_layers'],
-				_n_heads=model_params.get('n_heads', 8)  # Default for backward compatibility
-			)
-			assert(self.model is not None)
 
-			# Load model state
+			# Recreate model
+			n_archers = len(self.data_processor.archer_encoder.classes_)
+			self.model = ArcheryRNN(
+				self.sequence_length, n_archers, self.model_type,
+				model_params['hidden_dim'], model_params['n_layers'],
+				model_params.get('n_heads', 8)
+			).to(self.device)
+
 			self.model.load_state_dict(checkpoint['model_state_dict'])
-
-			# Load optimizer state if available
-			if checkpoint['optimizer_state_dict'] is not None and self.optimizer is not None:
-				self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-
-			print(f'Model loaded from {_filepath}')
 			return True
 
 		except FileNotFoundError:
-			print(f'Model file {_filepath} not found.')
+			print(f'Model file {filepath} not found.')
 			return False
 		except Exception as e:
 			print(f'Error loading model: {e}')
 			return False
 
-	def plot_training_history(self, _train_losses, _test_losses):
+	def _plot_training_history(self, train_losses, test_losses):
 		'''Plot training history'''
 		plt.figure(figsize=(10, 6))
-		plt.plot(_train_losses, label='Training Loss')
-		plt.plot(_test_losses, label='Validation Loss')
+		plt.plot(train_losses, label='Training Loss')
+		plt.plot(test_losses, label='Validation Loss')
 		plt.title(f'{self.model_type.upper()} Model Training History')
 		plt.xlabel('Epoch')
 		plt.ylabel('Loss (MSE)')
@@ -436,118 +416,40 @@ class ArcheryPredictor:
 		plt.grid(True)
 		plt.show()
 
-# Example usage
+	def get_available_archers(self):
+		'''Get list of available archer IDs'''
+		return list(self.data_processor.archer_encoder.classes_)
+
 def main():
-	'''
-	Main function that attempts to load existing models, or trains new ones if loading fails
-	'''
+	'''Main function demonstrating usage of all model types'''
+	models: dict[str, ArcheryPredictor] = {}
 
-	def load_or_train_model(model_type):
-		'''Helper function to load existing model or train a new one'''
-		print('=' * 60)
-		print(f'Processing {model_type.upper()} Model')
-		print('=' * 60)
+	for model_type in ['lstm', 'gru', 'transformer']:
+		predictor = ArcheryPredictor(sequence_length=12, model_type=model_type)
 
-		predictor = ArcheryPredictor(_sequence_length=12, _model_type=model_type)
-
-		# Try to load existing model
-		model_loaded = predictor.load_model()
-
-		if model_loaded:
-			print(f'✓ Successfully loaded existing {model_type.upper()} model')
-
-			# Verify model is working by checking if we can make a dummy prediction
-			try:
-				if hasattr(predictor, 'n_archers') and predictor.n_archers is not None:
-					print(f'Model ready for predictions. Archer count: {predictor.n_archers}')
-				else:
-					print('Warning: Model loaded but some parameters may be missing')
-			except Exception as e:
-				print(f'Warning: Loaded model may have issues: {e}')
-
+		if predictor.load_or_train(epochs=50, batch_size=64):
+			models[model_type] = predictor
 		else:
-			print(f'✗ No existing {model_type.upper()} model found. Training new model...')
+			print(f'Failed to initialize {model_type} model')
 
-			try:
-				# Prepare data
-				train_dataset, test_dataset = predictor.prepare_data(shared.PATH_DATASET)
-
-				# Create and train model
-				predictor.create_model(_hidden_dim=64, _n_layers=2, _dropout=0.2)
-				print(f'Training {model_type.upper()} model...')
-				assert(predictor is not None)
-				train_losses, test_losses = predictor.train(
-					train_dataset, test_dataset,
-					_epochs=50, _batch_size=64
-				)
-
-				# Save the trained model
-				predictor.save_model()
-
-				# Plot training history
-				predictor.plot_training_history(train_losses, test_losses)
-
-				print(f'✓ {model_type.upper()} model trained and saved successfully')
-
-			except FileNotFoundError:
-				print(f'✗ Error: Data file not found at {shared.PATH_DATASET}. Please ensure the data file exists.')
-				return None
-			except Exception as e:
-				print(f'✗ Error training {model_type.upper()} model: {e}')
-				return None
-
-		return predictor
-
-	# Load or train LSTM model
-	lstm_predictor = load_or_train_model('lstm')
-
-	# Load or train GRU model
-	gru_predictor = load_or_train_model('gru')
-
-	# Load or train Transformer model
-	transformer_predictor = load_or_train_model('transformer')
-
-	# Example predictions (only if all models loaded successfully)
-	if all(model is not None for model in [lstm_predictor, gru_predictor, transformer_predictor]):
+	# Demonstration if all models loaded successfully
+	for _, model in models.items():
 		print('\n' + '=' * 60)
 		print('All Models Ready for Predictions')
 		print('=' * 60)
 
-		print('All three models (LSTM, GRU, Transformer) are ready for use!')
-		print('\nTo make predictions, use:')
-		print('predictor.predict_score(archer_id, recent_scores)')
-		print('\nExample:')
-		print('recent_scores = [0.85, 0.87, 0.82, 0.89, 0.91, 0.88, 0.86, 0.90, 0.93, 0.87, 0.89, 0.92]')
-		print('prediction = predictor.predict_score(0, recent_scores)')
+		# Sample prediction demonstration
+		sample_scores = [
+			0.7615573632329024, 0.6122834217765443, 0.7433769949815001,
+			0.7108834281844016, 0.7174447752290504, 0.6029931475517498,
+			0.8136260904112261, 0.742366237718169, 0.6288655285771527,
+			0.7277966117076704, 0.5661138417053742, 0.6897291459339614]
 
-		# Show available archers if models are loaded
-		try:
-			if hasattr(lstm_predictor, 'archer_encoder') and hasattr(lstm_predictor.archer_encoder, 'classes_'):
-				print(f'\nAvailable Archers ({len(lstm_predictor.archer_encoder.classes_)}): {list(lstm_predictor.archer_encoder.classes_[:10])}{"..." if len(lstm_predictor.archer_encoder.classes_) > 10 else ""}')
-		except:
-			pass
+		prediction = model.predict_score(0, sample_scores)
+		print(f'Sample prediction for Archer 0: {prediction:.4f}')
+		print(f'Available archers: {len(model.get_available_archers())}')
 
-		# Demonstrate prediction with actual data from your sample
-		if lstm_predictor is not None:
-			try:
-				print('\n' + '=' * 40)
-				print('Sample Prediction Demonstration')
-				print('=' * 40)
-
-				# Use the first 12 scores from your sample data as an example
-				sample_scores = [0.7615573632329024, 0.6122834217765443, 0.7433769949815001,
-								0.7108834281844016, 0.7174447752290504, 0.6029931475517498,
-								0.8136260904112261, 0.742366237718169, 0.6288655285771527,
-								0.7277966117076704, 0.5661138417053742, 0.6897291459339614]
-
-				prediction = lstm_predictor.predict_score(0, sample_scores)
-				print(f'Predicted next score for Archer 0: {prediction:.4f}')
-				print(f'(Based on 12 recent scores ranging from {min(sample_scores):.4f} to {max(sample_scores):.4f})')
-
-			except Exception as e:
-				print(f'Could not demonstrate prediction: {e}')
-
-	return lstm_predictor, gru_predictor, transformer_predictor
+	return models
 
 if __name__ == '__main__':
-	lstm_model, gru_model, transformer_model = main()
+	trained_models = main()

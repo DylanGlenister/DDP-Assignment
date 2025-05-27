@@ -1,23 +1,23 @@
 '''
-+======================================+
-|               Title                  |
-|                                      |
-|  +--------------------------------+  |
-|  |                                |  |
-|  |   Use Matplotlib to display    |  |
-|  |  a graph of their historical   |  |
-|  |  scores and then a prediction  |  |
-|  |     of their future score      |  |
-|  |                                |  |
-|  +--------------------------------+  |
-|                                      |
-|  [Load previous scores]              |
-|  [Calculate score expectation]       |
-|                                      |
-+--------------------------------------+
++========================================================+
+|                        Title                           |
+|                                                        |
+|  +--------------------------------------------------+  |
+|  |                                                  |  |
+|  |      Use Matplotlib to display a graph of        |  |
+|  |       their historical scores and then a         |  |
+|  |        prediction of their future score          |  |
+|  |                                                  |  |
+|  +--------------------------------------------------+  |
+|                                                        |
+|   Select model:         [MODEL DROPDOWN ]V             |
+|  [Load previous scores] [Calculate score expectation]  |
+|                                                        |
++--------------------------------------------------------+
 '''
 
 import tkinter as tk
+import tkinter.ttk as ttk
 
 import matplotlib
 import pandas as pd
@@ -25,9 +25,11 @@ import pandas as pd
 matplotlib.use('TkAgg')
 
 from matplotlib.backends.backend_tkagg import \
-    NavigationToolbar2Tk  # type: ignore
+	NavigationToolbar2Tk  # type: ignore
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
+
+import machine_learning as ml
 
 # === MAIN WINDOW ===
 root = tk.Tk()
@@ -56,9 +58,30 @@ toolbar.update()
 # placing the toolbar on the Tkinter window
 canvas.get_tk_widget().pack()
 
-# === BUTTONS ===
-button_frame = tk.Frame(main_frame)
-button_frame.pack(pady=10)
+# === USER INPUT ===
+input_frame = tk.Frame(main_frame)
+input_frame.pack(fill=tk.X, pady=10)
+
+# === MODEL DROPDOWN (First Row) ===
+models = ['LSTM', 'GRU', 'TFMR']
+
+model_frame = tk.Frame(input_frame)
+model_frame.pack(pady=5)
+
+label = tk.Label(
+	model_frame,
+	text='Select model:',
+	anchor=tk.W
+)
+label.pack(side=tk.LEFT, padx=(0, 10))
+
+model_combo = ttk.Combobox(model_frame, values=models)
+model_combo.current(0)
+model_combo.pack(side=tk.LEFT)
+
+# === BUTTONS (Second Row) ===
+button_frame = tk.Frame(input_frame)
+button_frame.pack(pady=5)
 
 def load():
 	# list of squares
@@ -74,12 +97,13 @@ def load():
 	return
 
 load_btn = tk.Button(button_frame, text='Load previous scores', command=load)
-load_btn.pack(pady=10)
+load_btn.pack(side=tk.LEFT, padx=(0, 10), pady=10)
 
 def calculate():
 	return
 
 calculate_btn = tk.Button(button_frame, text='Calculate score expectation')
-calculate_btn.pack(pady=10)
+calculate_btn.pack(side=tk.LEFT, pady=10)
 
+# === RUN ===
 root.mainloop()

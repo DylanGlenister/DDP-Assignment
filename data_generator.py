@@ -23,7 +23,7 @@ ARCHER_NUM = 100
 ENTRIES_PER_ARCHER = 100
 
 random_means = rng_gen.normal(loc=0.8, scale=0.1, size=ARCHER_NUM)
-random_improvements = rng_gen.normal(loc=0.0007, scale=0.0006, size=ARCHER_NUM)
+random_improvements = rng_gen.normal(loc=0.0008, scale=0.0003, size=ARCHER_NUM)
 
 base_day_offsets = rng_gen.uniform(low=0, high=365, size=ARCHER_NUM).astype(int).tolist()
 

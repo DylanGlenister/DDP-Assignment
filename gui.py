@@ -28,7 +28,7 @@ import pandas as pd
 matplotlib.use('TkAgg')
 
 from matplotlib.backends.backend_tkagg import \
-    NavigationToolbar2Tk  # type: ignore
+	NavigationToolbar2Tk  # type: ignore
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
@@ -37,136 +37,144 @@ import shared
 
 
 class DataManager:
-	'''Handles all data loading and processing operations.'''
+	"""Handles all data loading and processing operations."""
 
-	def __init__(self, csv_path: str):
-		self.data = pd.read_csv(csv_path)
-		self.data['Date'] = pd.to_datetime(self.data['Date'])
-		self.archer_ids = sorted(self.data['ArcherID'].unique())
+	def __init__(self, _csv_path: str):
+		self.data = pd.read_csv(_csv_path)
+		self.data[shared.COLUMN_DATE] = pd.to_datetime(self.data[shared.COLUMN_DATE])
+		self.archer_ids = sorted(self.data[shared.COLUMN_ARCHER_ID].unique())
 		print(f'Loaded data for {len(self.archer_ids)} archers with {len(self.data)} total records')
 
-	def get_archer_data(self, archer_id: int) -> pd.DataFrame:
-		'''Get all data for a specific archer, sorted by date.'''
-		return self.data[self.data['ArcherID'] == archer_id].sort_values('Date')
+	def get_archer_data(self, _archer_id: int) -> pd.DataFrame:
+		"""Get all data for a specific archer, sorted by date."""
+		return self.data[self.data[shared.COLUMN_ARCHER_ID] == _archer_id].sort_values(shared.COLUMN_DATE)
 
-	def get_recent_scores(self, archer_id: int, sequence_length: int = 12) -> List[float]:
-		'''Get the most recent scores for an archer.'''
-		archer_data = self.get_archer_data(archer_id)
-		return archer_data['ScoreFraction'].tail(sequence_length).tolist()
+	def get_recent_scores(self, _archer_id: int, _sequence_length: int = 12) -> List[float]:
+		"""Get the most recent scores for an archer."""
+		archer_data = self.get_archer_data(_archer_id)
+		return archer_data[shared.COLUMN_SCORE].tail(_sequence_length).tolist()
 
 
 class ModelManager:
-	'''Handles loading and managing prediction models.'''
+	"""Handles loading and managing prediction models."""
 
 	MODEL_TYPES = ['lstm', 'gru', 'transformer']
 	MODEL_DISPLAY_NAMES = {'lstm': 'LSTM', 'gru': 'GRU', 'transformer': 'TFMR'}
 
-	def __init__(self, models_path: str):
-		self.models_path = models_path
+	def __init__(self):
 		self.predictors: Dict[str, ml.ArcheryPredictor] = {}
 		self._load_all_models()
 
-	def _load_single_model(self, model_type: str) -> Optional[ml.ArcheryPredictor]:
-		'''Load a single model of the specified type.'''
-		path = f'{self.models_path}archery_{model_type}_model.pt'
-		predictor = ml.ArcheryPredictor(_sequence_length=12, _model_type=model_type)
-		return predictor if predictor.load_model(path) else None
+	def _load_single_model(self, _model_type: str) -> Optional[ml.ArcheryPredictor]:
+		"""Load a single model of the specified type."""
+		try:
+			predictor = ml.ArcheryPredictor(_sequence_length=12, _model_type=_model_type)
+			if predictor.load_or_train(_force_retrain=False):
+				return predictor
+			else:
+				print(f'Failed to load {_model_type} model')
+				return None
+		except Exception as e:
+			print(f'Error loading {_model_type} model: {e}')
+			return None
 
 	def _load_all_models(self):
-		'''Load all available models.'''
+		"""Load all available models."""
+		print('Loading prediction models...')
 		for model_type in self.MODEL_TYPES:
+			print(f'Loading {model_type.upper()} model...')
 			self.predictors[model_type] = self._load_single_model(model_type)
 
-	def get_predictor(self, model_display_name: str) -> ml.ArcheryPredictor:
-		'''Get predictor by display name (e.g., 'LSTM' -> lstm predictor).'''
-		model_type = next(k for k, v in self.MODEL_DISPLAY_NAMES.items() if v == model_display_name)
+	def get_predictor(self, _model_display_name: str) -> ml.ArcheryPredictor:
+		"""Get predictor by display name (e.g., 'LSTM' -> lstm predictor)."""
+		model_type = next(k for k, v in self.MODEL_DISPLAY_NAMES.items() if v == _model_display_name)
 		predictor = self.predictors[model_type]
 		if predictor is None:
-			raise ValueError(f'Model {model_display_name} not available')
+			raise ValueError(f'Model {_model_display_name} not available')
 		return predictor
 
 	def get_display_names(self) -> List[str]:
-		'''Get list of available model display names.'''
+		"""Get list of available model display names."""
 		return [name for key, name in self.MODEL_DISPLAY_NAMES.items()
 				if self.predictors[key] is not None]
 
 	@property
 	def all_loaded(self) -> bool:
-		'''Check if all models are loaded successfully.'''
+		"""Check if all models are loaded successfully."""
 		return all(predictor is not None for predictor in self.predictors.values())
 
 
 class PlotManager:
-	'''Handles all plotting operations.'''
+	"""Handles all plotting operations."""
 
-	def __init__(self, figure: Figure, canvas: FigureCanvasTkAgg):
-		self.fig = figure
-		self.canvas = canvas
+	def __init__(self, _figure: Figure, _canvas: FigureCanvasTkAgg):
+		self.fig = _figure
+		self.canvas = _canvas
 
 	def clear_plot(self):
-		'''Clear the current plot.'''
+		"""Clear the current plot."""
 		self.fig.clear()
 
-	def plot_historical_data(self, archer_data: pd.DataFrame, archer_id: int):
-		'''Plot historical data for an archer.'''
+	def plot_historical_data(self, _archer_data: pd.DataFrame, _archer_id: int):
+		"""Plot historical data for an archer."""
 		self.clear_plot()
 		plot = self.fig.add_subplot(111)
 
-		plot.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-',
-				 color='blue', label=f'Archer {archer_id} - Historical', linewidth=2)
+		plot.plot(_archer_data[shared.COLUMN_DATE], _archer_data[shared.COLUMN_SCORE], 'o-',
+				 color='blue', label=f'Archer {_archer_id} - Historical', linewidth=2)
 
 		self._setup_plot(plot, 'Archery Scores - Historical Data')
 		self.canvas.draw()
 
-	def plot_with_prediction(self, archer_data: pd.DataFrame, archer_id: int,
-						   predicted_score: float, model_name: str):
-		'''Plot historical data with prediction.'''
+	def plot_with_prediction(self, _archer_data: pd.DataFrame, _archer_id: int,
+						   _predicted_score: float, _model_name: str):
+		"""Plot historical data with prediction."""
 		self.clear_plot()
 		plot = self.fig.add_subplot(111)
 
 		# Historical data
-		plot.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-',
-				 color='blue', label=f'Archer {archer_id} - Historical', linewidth=2)
+		plot.plot(_archer_data[shared.COLUMN_DATE], _archer_data[shared.COLUMN_SCORE], 'o-',
+				 color='blue', label=f'Archer {_archer_id} - Historical', linewidth=2)
 
 		# Prediction
 		current_date = datetime.now()
-		plot.plot([current_date], [predicted_score], 'o',
-				 color='red', markersize=12, label=f'Predicted Score ({model_name})', zorder=5)
+		plot.plot([current_date], [_predicted_score], 'o',
+				 color='red', markersize=12, label=f'Predicted Score ({_model_name})', zorder=5)
 
 		# Connection line
-		last_date = archer_data['Date'].iloc[-1]
-		last_score = archer_data['ScoreFraction'].iloc[-1]
-		plot.plot([last_date, current_date], [last_score, predicted_score],
+		last_date = _archer_data[shared.COLUMN_DATE].iloc[-1]
+		last_score = _archer_data[shared.COLUMN_SCORE].iloc[-1]
+		plot.plot([last_date, current_date], [last_score, _predicted_score],
 				 '--', color='red', alpha=0.7, linewidth=2)
 
 		# Annotation
-		plot.annotate(f'Predicted: {predicted_score:.4f}',
-					 xy=(current_date, predicted_score), xytext=(10, 10),
+		plot.annotate(f'Predicted: {_predicted_score:.4f}',
+					 xy=(current_date, _predicted_score), xytext=(10, 10),
 					 textcoords='offset points',
 					 bbox=dict(boxstyle='round,pad=0.3', facecolor='red', alpha=0.3),
 					 arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
 
-		title = f'Archery Scores - Historical Data + {model_name} Prediction'
+		title = f'Archery Scores - Historical Data + {_model_name} Prediction'
 		self._setup_plot(plot, title)
 		self.canvas.draw()
 
-	def _setup_plot(self, plot, title: str):
-		'''Common plot setup operations.'''
-		plot.set_xlabel('Date')
-		plot.set_ylabel('Score Fraction')
-		plot.set_title(title)
-		plot.legend()
-		plot.grid(True, alpha=0.3)
-		plot.tick_params(axis='x', rotation=45)
+	def _setup_plot(self, _plot, _title: str):
+		"""Common plot setup operations."""
+		_plot.set_xlabel('Date')
+		_plot.set_ylabel('Score Fraction')
+		_plot.set_title(_title)
+		_plot.legend()
+		_plot.grid(True, alpha=0.3)
+		_plot.tick_params(axis='x', rotation=45)
 		self.fig.tight_layout()
 
 
 class ArcheryPredictionGUI:
-	'''Main application class that coordinates all components.'''
+	"""Main application class that coordinates all components."""
 
 	def __init__(self):
 		self.data_manager = DataManager(shared.PATH_DATASET)
-		self.model_manager = ModelManager(shared.PATH_MODELS)
+		self.model_manager = ModelManager()
 
 		self.root = tk.Tk()
 		self.root.title('Archery Score Prediction System')
@@ -176,7 +184,7 @@ class ArcheryPredictionGUI:
 		self._update_initial_status()
 
 	def _setup_ui(self):
-		'''Setup the user interface.'''
+		"""Setup the user interface."""
 		main_frame = tk.Frame(self.root)
 		main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -186,9 +194,9 @@ class ArcheryPredictionGUI:
 		# Input controls setup
 		self._setup_controls(main_frame)
 
-	def _setup_graph(self, parent):
-		'''Setup the matplotlib graph area.'''
-		graph_frame = tk.Frame(parent)
+	def _setup_graph(self, _parent):
+		"""Setup the matplotlib graph area."""
+		graph_frame = tk.Frame(_parent)
 		graph_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
 		fig = Figure(figsize=(8, 6), dpi=100)
@@ -199,9 +207,9 @@ class ArcheryPredictionGUI:
 
 		self.plot_manager = PlotManager(fig, canvas)
 
-	def _setup_controls(self, parent):
-		'''Setup input controls and buttons.'''
-		input_frame = tk.Frame(parent)
+	def _setup_controls(self, _parent):
+		"""Setup input controls and buttons."""
+		input_frame = tk.Frame(_parent)
 		input_frame.pack(fill=tk.X, pady=10)
 
 		# Archer selection
@@ -210,7 +218,8 @@ class ArcheryPredictionGUI:
 
 		tk.Label(archer_frame, text='Select archer:', anchor=tk.W, width=15).pack(side=tk.LEFT, padx=(20, 10))
 		self.archer_combo = ttk.Combobox(archer_frame, values=self.data_manager.archer_ids)
-		self.archer_combo.current(0)
+		if self.data_manager.archer_ids:
+			self.archer_combo.current(0)
 		self.archer_combo.pack(side=tk.LEFT)
 
 		# Model selection
@@ -219,7 +228,9 @@ class ArcheryPredictionGUI:
 
 		tk.Label(model_frame, text='Select model:', anchor=tk.W, width=15).pack(side=tk.LEFT, padx=(20, 10))
 		self.model_combo = ttk.Combobox(model_frame, values=self.model_manager.get_display_names())
-		self.model_combo.current(0)
+		available_models = self.model_manager.get_display_names()
+		if available_models:
+			self.model_combo.current(0)
 		self.model_combo.pack(side=tk.LEFT)
 
 		# Buttons
@@ -237,46 +248,69 @@ class ArcheryPredictionGUI:
 		self.status_label = tk.Label(status_frame, text='', fg='blue')
 		self.status_label.pack()
 
-	def _update_status(self, message: str, color: str = 'blue'):
-		'''Update the status message.'''
-		self.status_label.config(text=message, fg=color)
+	def _update_status(self, _message: str, _color: str = 'blue'):
+		"""Update the status message."""
+		self.status_label.config(text=_message, fg=_color)
 		self.root.update()
 
 	def _update_initial_status(self):
-		'''Set the initial status message.'''
+		"""Set the initial status message."""
 		if self.model_manager.all_loaded:
 			self._update_status('Models loaded successfully. Ready for predictions.', 'green')
 		else:
-			self._update_status('Warning: Not all models loaded. Some predictions may be unavailable.', 'orange')
+			loaded_models = [name for name in self.model_manager.get_display_names()]
+			if loaded_models:
+				self._update_status(f'Partial load: {", ".join(loaded_models)} available.', 'orange')
+			else:
+				self._update_status('Warning: No models loaded. Please check model files.', 'red')
 
 	def _get_selected_archer(self) -> int:
-		'''Get the currently selected archer ID.'''
+		"""Get the currently selected archer ID."""
 		return int(self.archer_combo.get())
 
 	def _get_selected_model(self) -> str:
-		'''Get the currently selected model name.'''
+		"""Get the currently selected model name."""
 		return self.model_combo.get()
 
 	def load_historical_data(self):
-		'''Load and display historical scores for the selected archer.'''
-		self._update_status('Loading historical scores...')
+		"""Load and display historical scores for the selected archer."""
+		try:
+			self._update_status('Loading historical scores...')
 
-		archer_id = self._get_selected_archer()
-		archer_data = self.data_manager.get_archer_data(archer_id)
-		self.plot_manager.plot_historical_data(archer_data, archer_id)
+			archer_id = self._get_selected_archer()
+			archer_data = self.data_manager.get_archer_data(archer_id)
 
-		self._update_status('Historical scores loaded successfully', 'green')
+			if archer_data.empty:
+				self._update_status(f'No data found for archer {archer_id}', 'red')
+				return
+
+			self.plot_manager.plot_historical_data(archer_data, archer_id)
+			self._update_status('Historical scores loaded successfully', 'green')
+
+		except Exception as e:
+			error_msg = f'Error loading historical data: {e}'
+			print(error_msg)
+			self._update_status(error_msg, 'red')
 
 	def calculate_prediction(self):
-		'''Calculate and display prediction for the selected archer.'''
-		self._update_status('Calculating prediction...')
-
-		archer_id = self._get_selected_archer()
-		model_name = self._get_selected_model()
-
+		"""Calculate and display prediction for the selected archer."""
 		try:
+			self._update_status('Calculating prediction...')
+
+			archer_id = self._get_selected_archer()
+			model_name = self._get_selected_model()
+
+			if not model_name:
+				self._update_status('No model selected', 'red')
+				return
+
 			# Get data and make prediction
 			recent_scores = self.data_manager.get_recent_scores(archer_id)
+
+			if not recent_scores:
+				self._update_status(f'No score data available for archer {archer_id}', 'red')
+				return
+
 			predictor = self.model_manager.get_predictor(model_name)
 			predicted_score = predictor.predict_score(archer_id, recent_scores)
 
@@ -292,15 +326,14 @@ class ArcheryPredictionGUI:
 			error_msg = f'Error calculating prediction: {e}'
 			print(error_msg)
 			self._update_status(error_msg, 'red')
-			raise
 
 	def run(self):
-		'''Start the application.'''
+		"""Start the application."""
 		self.root.mainloop()
 
 
 def main():
-	'''Main entry point.'''
+	"""Main entry point."""
 	app = ArcheryPredictionGUI()
 	app.run()
 

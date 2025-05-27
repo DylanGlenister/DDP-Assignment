@@ -23,7 +23,7 @@ ARCHER_NUM = 100
 ENTRIES_PER_ARCHER = 100
 
 random_means = rng_gen.normal(loc=0.8, scale=0.1, size=ARCHER_NUM)
-random_improvements = rng_gen.normal(loc=0.001, scale=0.0006, size=ARCHER_NUM)
+random_improvements = rng_gen.normal(loc=0.0007, scale=0.0006, size=ARCHER_NUM)
 
 base_day_offsets = rng_gen.uniform(low=0, high=365, size=ARCHER_NUM).astype(int).tolist()
 
@@ -50,7 +50,7 @@ for archer in range(ARCHER_NUM):
         current_day = current_day - timedelta(days=day_changes[day])
         archer_list["Date"].append(current_day)
         current_skill = current_skill - improvement_factor*day_changes[day]
-        score_frac = rng_gen.normal(loc=current_skill, scale=0.03, size=None)
+        score_frac = rng_gen.normal(loc=current_skill, scale=0.05, size=None)
         score_frac = score_frac if score_frac < 1 else 1
         archer_list["ScoreFraction"].append(score_frac)
 

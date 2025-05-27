@@ -165,46 +165,40 @@ def get_recent_scores(archer_id, sequence_length=12):
 def load():
 	global data
 
-	try:
-		update_status('Loading historical scores...')
+	update_status('Loading historical scores...')
 
-		# Clear previous plot
-		fig.clear()
+	# Clear previous plot
+	fig.clear()
 
-		# Plot data for selected archer
-		plot1 = fig.add_subplot(111)
+	# Plot data for selected archer
+	plot1 = fig.add_subplot(111)
 
-		selected_archer_str = archer_combo.get()
-		if selected_archer_str:
-			selected_archer = int(selected_archer_str)
-			archer_data = data[data['ArcherID'] == selected_archer].sort_values('Date')
-			plot1.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-',
-					  color='blue', label=f'Archer {selected_archer} - Historical')
-		else:
-			# Plot for first archer if none selected
-			first_archer = archer_ids[0] if archer_ids else 0
-			archer_data = data[data['ArcherID'] == first_archer].sort_values('Date')
-			plot1.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-',
-					  color='blue', label=f'Archer {first_archer} - Historical')
+	selected_archer_str = archer_combo.get()
+	if selected_archer_str:
+		selected_archer = int(selected_archer_str)
+		archer_data = data[data['ArcherID'] == selected_archer].sort_values('Date')
+		plot1.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-',
+					color='blue', label=f'Archer {selected_archer} - Historical')
+	else:
+		# Plot for first archer if none selected
+		first_archer = archer_ids[0] if archer_ids else 0
+		archer_data = data[data['ArcherID'] == first_archer].sort_values('Date')
+		plot1.plot(archer_data['Date'], archer_data['ScoreFraction'], 'o-',
+					color='blue', label=f'Archer {first_archer} - Historical')
 
-		plot1.set_xlabel('Date')
-		plot1.set_ylabel('Score Fraction')
-		plot1.set_title('Archery Scores - Historical Data')
-		plot1.legend()
-		plot1.grid(True, alpha=0.3)
+	plot1.set_xlabel('Date')
+	plot1.set_ylabel('Score Fraction')
+	plot1.set_title('Archery Scores - Historical Data')
+	plot1.legend()
+	plot1.grid(True, alpha=0.3)
 
-		# Rotate x-axis labels for better readability
-		plot1.tick_params(axis='x', rotation=45)
+	# Rotate x-axis labels for better readability
+	plot1.tick_params(axis='x', rotation=45)
 
-		fig.tight_layout()
-		canvas.draw()
+	fig.tight_layout()
+	canvas.draw()
 
-		update_status('Historical scores loaded successfully', 'green')
-
-	except Exception as e:
-		error_msg = f'Error plotting data: {e}'
-		print(error_msg)
-		update_status(error_msg, 'red')
+	update_status('Historical scores loaded successfully', 'green')
 
 def calculate():
 	global data, lstm_predictor, gru_predictor, transformer_predictor

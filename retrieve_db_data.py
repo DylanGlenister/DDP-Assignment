@@ -44,6 +44,7 @@ class DB_Retriever:
         total_scores = cursor.fetchall()
         
         round_names = [entry[3] for entry in total_scores]
+        round_names = list(tuple(round_names))
         formatted_round_names = "\',\'".join(round_name for round_name in round_names)
         
         max_scores_query = f"SELECT `round_definition`.`name`, SUM(`range_definition`.`ends` * `range_definition`.`arrowsPerEnd` * 10) AS maxScore FROM `round_definition` NATURAL JOIN `range_order` NATURAL JOIN `range_definition` WHERE `round_definition`.`name` in (\'{formatted_round_names}\') GROUP BY `round_definition`.`roundDefID`;"

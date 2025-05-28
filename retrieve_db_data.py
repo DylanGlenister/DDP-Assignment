@@ -47,7 +47,7 @@ class DB_Retriever:
         round_names = list(tuple(round_names))
         formatted_round_names = "\',\'".join(round_name for round_name in round_names)
         
-        max_scores_query = f"SELECT `round_definition`.`name`, SUM(`range_definition`.`ends` * `range_definition`.`arrowsPerEnd` * 10) AS maxScore FROM `round_definition` NATURAL JOIN `range_order` NATURAL JOIN `range_definition` WHERE `round_definition`.`name` in (\'{formatted_round_names}\') GROUP BY `round_definition`.`roundDefID`;"
+        max_scores_query = f"SELECT `round_definition`.`name`, SUM(`range_definition`.`ends` * `range_definition`.`arrowsPerEnd` * 10) AS maxScore FROM `round_definition` NATURAL JOIN `range_order` NATURAL JOIN `range_definition` GROUP BY `round_definition`.`roundDefID`;"
         
         cursor.execute(max_scores_query)
         max_scores = cursor.fetchall()
@@ -55,6 +55,12 @@ class DB_Retriever:
         max_scores_dict = {}
         for max_score in max_scores:
             max_scores_dict[max_score[0]] = int(max_score[1])
+            
+        output_max = {
+            'RoundName': max_scores_dict.keys(),
+            'MaxScore': max_scores_dict.values()
+        }
+        print(output_max)
         
         output = {
             "ArcherID":         [],
@@ -67,5 +73,4 @@ class DB_Retriever:
             output["ScoreFraction"].append(float(entry[2]/max_scores_dict[entry[3]]))
         
         connection.close()
-        return(pd.DataFrame(output))
-
+        return(pd.DataFrame(output), pd.DataFrame(output_max))

@@ -64,15 +64,11 @@ class ModelManager:
 
 	def _load_single_model(self, _model_type: str) -> Optional[ml.ArcheryPredictor]:
 		"""Load a single model of the specified type."""
-		try:
-			predictor = ml.ArcheryPredictor(_sequence_length=12, _model_type=_model_type)
-			if predictor.load_or_train():
-				return predictor
-			else:
-				print(f'Failed to load {_model_type} model')
-				return None
-		except Exception as e:
-			print(f'Error loading {_model_type} model: {e}')
+		predictor = ml.ArcheryPredictor(_sequence_length=12, _model_type=_model_type)
+		if predictor.load_or_train():
+			return predictor
+		else:
+			print(f'Failed to load {_model_type} model')
 			return None
 
 	def _load_all_models(self):
@@ -80,7 +76,9 @@ class ModelManager:
 		print('Loading prediction models...')
 		for model_type in shared.MODEL_TYPES:
 			print(f'Loading {shared.MODEL_DISPLAY_NAMES[model_type]} model...')
-			self.predictors[model_type] = self._load_single_model(model_type)
+			predictor = self._load_single_model(model_type)
+			if predictor is not None:
+				self.predictors[model_type] = predictor
 
 	def get_predictor(self, _model_display_name: str) -> ml.ArcheryPredictor:
 		"""Get predictor by display name (e.g., 'lstm' -> lstm predictor)."""
@@ -116,39 +114,73 @@ class PlotManager:
 		self.clear_plot()
 		plot = self.fig.add_subplot(111)
 
-		plot.plot(_archer_data[shared.COLUMN_DATE], _archer_data[shared.COLUMN_SCORE], 'o-',
-				 color='blue', label=f'Archer {_archer_id} - Historical', linewidth=2)
+		plot.plot(
+			_archer_data[shared.COLUMN_DATE],
+			_archer_data[shared.COLUMN_SCORE],
+			'o-',
+			color='blue',
+			label=f'Archer {_archer_id} - Historical',
+			linewidth=2
+		)
 
 		self._setup_plot(plot, 'Archery Scores - Historical Data')
 		self.canvas.draw()
 
-	def plot_with_prediction(self, _archer_data: pd.DataFrame, _archer_id: int,
-						   _predicted_score: float, _model_name: str):
+	def plot_with_prediction(
+			self,
+			_archer_data: pd.DataFrame,
+			_archer_id: int,
+			_predicted_score: float,
+			_model_name: str
+		):
 		"""Plot historical data with prediction."""
 		self.clear_plot()
 		plot = self.fig.add_subplot(111)
 
 		# Historical data
-		plot.plot(_archer_data[shared.COLUMN_DATE], _archer_data[shared.COLUMN_SCORE], 'o-',
-				 color='blue', label=f'Archer {_archer_id} - Historical', linewidth=2)
+		plot.plot(
+			_archer_data[shared.COLUMN_DATE],
+			_archer_data[shared.COLUMN_SCORE],
+			'o-',
+			color='blue',
+			label=f'Archer {_archer_id} - Historical',
+			linewidth=2
+		)
 
 		# Prediction
 		current_date = datetime.now()
-		plot.plot([current_date], [_predicted_score], 'o',
-				 color='red', markersize=12, label=f'Predicted Score ({_model_name})', zorder=5)
+		plot.plot(
+			[current_date],  # type: ignore
+			[_predicted_score],
+			'o',
+			color='red',
+			markersize=12,
+			label=f'Predicted Score ({_model_name})',
+			zorder=5
+		)
 
 		# Connection line
 		last_date = _archer_data[shared.COLUMN_DATE].iloc[-1]
 		last_score = _archer_data[shared.COLUMN_SCORE].iloc[-1]
-		plot.plot([last_date, current_date], [last_score, _predicted_score],
-				 '--', color='red', alpha=0.7, linewidth=2)
+		plot.plot(
+			[last_date, current_date],  # type: ignore
+			[last_score,
+			_predicted_score],
+			'--',
+			color='red',
+			alpha=0.7,
+			linewidth=2
+		)
 
 		# Annotation
-		plot.annotate(f'Predicted: {_predicted_score:.4f}',
-					 xy=(current_date, _predicted_score), xytext=(10, 10),
-					 textcoords='offset points',
-					 bbox=dict(boxstyle='round,pad=0.3', facecolor='red', alpha=0.3),
-					 arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0'))
+		plot.annotate(
+			f'Predicted: {_predicted_score:.4f}',
+			xy=(current_date, _predicted_score),  # type: ignore
+			xytext=(10, 10),
+			textcoords='offset points',
+			bbox=dict(boxstyle='round,pad=0.3', facecolor='red', alpha=0.3),
+			arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
+		)
 
 		title = f'Archery Scores - Historical Data + {_model_name} Prediction'
 		self._setup_plot(plot, title)
@@ -212,7 +244,11 @@ class ArcheryPredictionGUI:
 		archer_frame = tk.Frame(input_frame)
 		archer_frame.pack(pady=5)
 
-		tk.Label(archer_frame, text='Select archer:', anchor=tk.W, width=15).pack(side=tk.LEFT, padx=(20, 10))
+		tk.Label(
+			archer_frame,
+			text='Select archer:',
+			anchor=tk.W, width=15
+		).pack(side=tk.LEFT, padx=(20, 10))
 		self.archer_combo = ttk.Combobox(archer_frame, values=self.data_manager.archer_ids)
 		if self.data_manager.archer_ids:
 			self.archer_combo.current(0)
@@ -222,7 +258,11 @@ class ArcheryPredictionGUI:
 		model_frame = tk.Frame(input_frame)
 		model_frame.pack(pady=5)
 
-		tk.Label(model_frame, text='Select model:', anchor=tk.W, width=15).pack(side=tk.LEFT, padx=(20, 10))
+		tk.Label(
+			model_frame,
+			text='Select model:',
+			anchor=tk.W, width=15
+		).pack(side=tk.LEFT, padx=(20, 10))
 		self.model_combo = ttk.Combobox(model_frame, values=self.model_manager.get_display_names())
 		available_models = self.model_manager.get_display_names()
 		if available_models:
@@ -233,10 +273,16 @@ class ArcheryPredictionGUI:
 		button_frame = tk.Frame(input_frame)
 		button_frame.pack(pady=5)
 
-		tk.Button(button_frame, text='Load previous scores',
-				 command=self.load_historical_data).pack(side=tk.LEFT, padx=(0, 10), pady=10)
-		tk.Button(button_frame, text='Calculate score expectation',
-				 command=self.calculate_prediction).pack(side=tk.LEFT, pady=10)
+		tk.Button(
+			button_frame,
+			text='Load previous scores',
+			command=self.load_historical_data
+		).pack(side=tk.LEFT, padx=(0, 10), pady=10)
+		tk.Button(
+			button_frame,
+			text='Calculate score expectation',
+			command=self.calculate_prediction
+		).pack(side=tk.LEFT, pady=10)
 
 		# Status label
 		status_frame = tk.Frame(input_frame)

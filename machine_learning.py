@@ -269,7 +269,7 @@ class ModelTrainer:
 
 
 class ArcheryPredictor:
-	"""Main class for archery score prediction with integrated load/train functionality"""
+	"""Main class for archery score prediction"""
 
 	def __init__(self, _sequence_length: int = 12, _model_type: str = shared.MODEL_TYPE_LSTM):
 		self.sequence_length = _sequence_length
@@ -352,10 +352,11 @@ class ArcheryPredictor:
 
 	def predict_score(self, _archer_id: int | str, _recent_scores: list[float] | None = None) -> float:
 		"""Predict next score for a given archer"""
+		assert(self.model is not None)
 		self.model.eval()
 
 		# Encode archer ID
-		archer_encoded = self.data_processor.archer_encoder.transform([_archer_id])[0]
+		archer_encoded = self.data_processor.archer_encoder.transform([_archer_id])[0]  # type: ignore
 
 		# Prepare recent scores
 		if _recent_scores is None:
@@ -379,7 +380,7 @@ class ArcheryPredictor:
 	def _prepare_score_sequence(self, _recent_scores: list[float]) -> list[float]:
 		"""Prepare score sequence for prediction"""
 		if len(_recent_scores) < self.sequence_length:
-			mean_score = np.mean(_recent_scores) if _recent_scores else 0.7
+			mean_score = float(np.mean(_recent_scores) if _recent_scores else 0.7)
 			padding = [mean_score] * (self.sequence_length - len(_recent_scores))
 			return padding + list(_recent_scores)
 		elif len(_recent_scores) > self.sequence_length:
@@ -389,6 +390,8 @@ class ArcheryPredictor:
 	def _save_model(self):
 		"""Save the trained model"""
 		filepath = f'{shared.PATH_MODELS}archery_{self.model_type}_model.pt'
+		assert(self.model is not None)
+		assert(self.trainer is not None)
 		checkpoint = {
 			'model_state_dict': self.model.state_dict(),
 			'optimizer_state_dict': self.trainer.optimizer.state_dict(),
@@ -481,4 +484,4 @@ def main():
 
 
 if __name__ == '__main__':
-	trained_models = main()
+	main()

@@ -40,7 +40,7 @@ for archer in range(ARCHER_NUM):
     mean_skill = random_means[archer]
     improvement_factor = random_improvements[archer]
     initial_day = base_day - timedelta(days=base_day_offsets[archer])
-    
+
     day_changes = rng_gen.uniform(low=1, high=7, size=ENTRIES_PER_ARCHER).astype(int).tolist()
 
     current_day = initial_day

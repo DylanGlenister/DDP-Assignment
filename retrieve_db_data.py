@@ -15,7 +15,7 @@ class DB_Retriever:
 		self.db_username = SETTINGS.database_username
 		self.db_password = SETTINGS.database_password
 
-	def _get_connection(self) -> Connection | None:
+	def _get_connection(self) -> Connection:
 		"""Helper method to establish database connection"""
 		try:
 			connection = pymysql.connect(
@@ -28,9 +28,9 @@ class DB_Retriever:
 			return connection
 		except Exception as e:
 			print(f'Failed to connect: {e}')
-			return
+			raise ConnectionError(f'Could not connect to the database: {e}')
 
-	def get_archer_scores(self, _firstname: str, _lastname: str, _birthyear: int) -> pd.DataFrame | None:
+	def get_archer_scores(self, _firstname: str, _lastname: str, _birthyear: int) -> pd.DataFrame:
 		"""
 		Retrieve archer scores from the database
 
@@ -44,8 +44,6 @@ class DB_Retriever:
 			Returns None if no archers found or connection fails
 		"""
 		connection = self._get_connection()
-		if connection is None:
-			return
 
 		cursor = connection.cursor()
 
@@ -57,7 +55,7 @@ class DB_Retriever:
 		if len(ids) == 0:
 			print('Did not find any archers matching the parameters')
 			connection.close()
-			return
+			return pd.DataFrame(columns=['ArcherID', 'Date', 'TotalScore', 'Round'])
 
 		list_ids = [id_tuple[0] for id_tuple in ids if id_tuple is not None]
 		ids_textformatted = ','.join([str(x) for x in list_ids])
@@ -79,7 +77,7 @@ class DB_Retriever:
 		connection.close()
 		return pd.DataFrame(output)
 
-	def get_round_info(self) -> pd.DataFrame | None:
+	def get_round_info(self) -> pd.DataFrame:
 		"""
 		Retrieve round information including maximum possible scores
 
@@ -88,8 +86,6 @@ class DB_Retriever:
 			Returns None if connection fails
 		"""
 		connection = self._get_connection()
-		if connection is None:
-			return
 
 		cursor = connection.cursor()
 
@@ -113,7 +109,7 @@ class DB_Retriever:
 		_firstname: str,
 		_lastname: str,
 		_birthyear: int
-	) -> pd.DataFrame | None:
+	) -> pd.DataFrame:
 		"""
 		Get archer scores with score fractions (score/max_score)
 
@@ -130,10 +126,11 @@ class DB_Retriever:
 		"""
 		# Get archer scores and round info
 		scores_df = self.get_archer_scores(_firstname, _lastname, _birthyear)
-		rounds_df = self.get_round_info()
 
-		if scores_df is None or rounds_df is None or scores_df.empty:
-			return
+		if scores_df.empty:
+			return pd.DataFrame(columns=['ArcherID', 'Date', 'ScoreFraction'])
+
+		rounds_df = self.get_round_info()
 
 		# Create max scores dictionary for lookup
 		max_scores_dict = dict(zip(rounds_df['RoundName'], rounds_df['MaxScore']))
@@ -158,9 +155,9 @@ class DB_Retriever:
 def main():
 	retriever = DB_Retriever()
 
-	firstname = 'Moselle'
-	lastname = 'Speachley'
-	yob = 1986
+	firstname = 'Devi'
+	lastname = 'Cropton'
+	yob = 2012
 
 	archer_scores = retriever.get_archer_scores(firstname, lastname, yob)
 	if archer_scores is not None:
@@ -179,3 +176,56 @@ def main():
 
 if __name__ == '__main__':
 	main()
+
+""" === Output reference ===
+
+	Archer scores:
+	   ArcherID        Date TotalScore       Round
+	0         7  2024-01-10        569     Samford
+	1         7  2025-04-08        265      Darwin
+	2         7  2025-01-01        392  Wollongong
+	3         7  2025-02-14        452    Canberra
+
+	Round info:
+	          RoundName  MaxScore
+	0         WA90/1440      1440
+	1         WA70/1440      1440
+	2         WA60/1440      1440
+	3         AA50/1440      1440
+	4         AA40/1440      1080
+	5          WA70/720       720
+	6          WA60/720       720
+	7          WA50/720       720
+	8          Canberra       900
+	9       Long Sydney      1200
+	10           Sydney      1200
+	11    Long Brisbane      1200
+	12         Brisbane      1200
+	13         Adelaide      1200
+	14   Short Adelaide      1200
+	15           Hobart       900
+	16            Perth       900
+	17   Short Canberra       900
+	18  Junior Canberra       900
+	19    Mini Canberra       900
+	20           Grange       900
+	21        Melbourne       900
+	22           Darwin       900
+	23          Geelong       900
+	24        Newcastle       900
+	25             Holt       900
+	26          Samford       900
+	27            Drake       900
+	28       Wollongong       720
+	29       Townsville       720
+	30       Launceston       720
+	31      Full Spread      1200
+
+	Scores with fractions:
+	   ArcherID        Date  ScoreFraction
+	0         7  2024-01-10       0.632222
+	1         7  2025-04-08       0.294444
+	2         7  2025-01-01       0.544444
+	3         7  2025-02-14       0.502222
+
+"""

@@ -5,7 +5,11 @@ PATH_MODELS = './models/'
 # Column names for the archery dataset
 COLUMN_ARCHER_ID = 'ArcherID'
 COLUMN_DATE = 'Date'
-COLUMN_SCORE = 'ScoreFraction'
+COLUMN_SCORE_FRACTION = 'ScoreFraction'
+COLUMN_TOTAL_SCORE = 'TotalScore'
+COLUMN_ROUND = 'Round'
+COLUMN_ROUND_NAME = 'RoundName'
+COLUMN_MAX_SCORE = 'MaxScore'
 
 MODEL_TYPE_LSTM = 'lstm'
 MODEL_TYPE_GRU = 'gru'

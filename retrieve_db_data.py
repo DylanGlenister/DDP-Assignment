@@ -6,7 +6,9 @@ import pandas as pd
 import pymysql
 from pymysql.connections import Connection
 
+import shared
 from settings import SETTINGS
+
 
 class DB_Retriever:
 	def __init__(self):
@@ -55,7 +57,7 @@ class DB_Retriever:
 		if len(ids) == 0:
 			print('Did not find any archers matching the parameters')
 			connection.close()
-			return pd.DataFrame(columns=['ArcherID', 'Date', 'TotalScore', 'Round'])
+			return pd.DataFrame(columns=[shared.COLUMN_ARCHER_ID, shared.COLUMN_DATE, shared.COLUMN_TOTAL_SCORE, shared.COLUMN_ROUND])
 
 		list_ids = [id_tuple[0] for id_tuple in ids if id_tuple is not None]
 		ids_textformatted = ','.join([str(x) for x in list_ids])
@@ -68,10 +70,10 @@ class DB_Retriever:
 
 		# Format output as DataFrame
 		output = {
-			'ArcherID': [entry[0] for entry in total_scores],
-			'Date': [entry[1] for entry in total_scores],
-			'TotalScore': [entry[2] for entry in total_scores],
-			'Round': [entry[3] for entry in total_scores]
+			shared.COLUMN_ARCHER_ID: [entry[0] for entry in total_scores],
+			shared.COLUMN_DATE: [entry[1] for entry in total_scores],
+			shared.COLUMN_TOTAL_SCORE: [entry[2] for entry in total_scores],
+			shared.COLUMN_ROUND: [entry[3] for entry in total_scores]
 		}
 
 		connection.close()
@@ -97,8 +99,8 @@ class DB_Retriever:
 
 		# Format output as DataFrame
 		output = {
-			'RoundName': [entry[0] for entry in max_scores],
-			'MaxScore': [int(entry[1]) for entry in max_scores]
+			shared.COLUMN_ROUND_NAME: [entry[0] for entry in max_scores],
+			shared.COLUMN_MAX_SCORE: [int(entry[1]) for entry in max_scores]
 		}
 
 		connection.close()
@@ -128,26 +130,26 @@ class DB_Retriever:
 		scores_df = self.get_archer_scores(_firstname, _lastname, _birthyear)
 
 		if scores_df.empty:
-			return pd.DataFrame(columns=['ArcherID', 'Date', 'ScoreFraction'])
+			return pd.DataFrame(columns=[shared.COLUMN_ARCHER_ID, shared.COLUMN_DATE, shared.COLUMN_SCORE_FRACTION])
 
 		rounds_df = self.get_round_info()
 
 		# Create max scores dictionary for lookup
-		max_scores_dict = dict(zip(rounds_df['RoundName'], rounds_df['MaxScore']))
+		max_scores_dict = dict(zip(rounds_df[shared.COLUMN_ROUND_NAME], rounds_df[shared.COLUMN_MAX_SCORE]))
 
 		# Calculate score fractions
 		output = {
-			'ArcherID': [],
-			'Date': [],
-			'ScoreFraction': []
+			shared.COLUMN_ARCHER_ID: [],
+			shared.COLUMN_DATE: [],
+			shared.COLUMN_SCORE_FRACTION: []
 		}
 
 		for _, row in scores_df.iterrows():
-			round_name = row['Round']
+			round_name = row[shared.COLUMN_ROUND]
 			if round_name in max_scores_dict:
-				output['ArcherID'].append(row['ArcherID'])
-				output['Date'].append(row['Date'])
-				output['ScoreFraction'].append(float(row['TotalScore'] / max_scores_dict[round_name]))
+				output[shared.COLUMN_ARCHER_ID].append(row[shared.COLUMN_ARCHER_ID])
+				output[shared.COLUMN_DATE].append(row[shared.COLUMN_DATE])
+				output[shared.COLUMN_SCORE_FRACTION].append(float(row[shared.COLUMN_TOTAL_SCORE] / max_scores_dict[round_name]))
 
 		return pd.DataFrame(output)
 

@@ -144,7 +144,7 @@ class DataProcessor:
 		print(f'Data shape: {df.shape}')
 		print(f'Unique archers: {df[shared.COLUMN_ARCHER_ID].nunique()}')
 		print(f'Date range: {df[shared.COLUMN_DATE].min()} to {df[shared.COLUMN_DATE].max()}')
-		print(f'Score range: {df[shared.COLUMN_SCORE].min():.4f} to {df[shared.COLUMN_SCORE].max():.4f}')
+		print(f'Score range: {df[shared.COLUMN_SCORE_FRACTION].min():.4f} to {df[shared.COLUMN_SCORE_FRACTION].max():.4f}')
 
 		return df
 
@@ -156,7 +156,7 @@ class DataProcessor:
 		archer_list: list = []
 
 		for archer_id, group in _df.groupby(shared.COLUMN_ARCHER_ID):
-			scores = group[shared.COLUMN_SCORE].values.astype(float)
+			scores = group[shared.COLUMN_SCORE_FRACTION].values.astype(float)
 
 			if len(scores) <= self.sequence_length:
 				print(f'Skipping archer {archer_id}: only {len(scores)} scores (need >{self.sequence_length})')

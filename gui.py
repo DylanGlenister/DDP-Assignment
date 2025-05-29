@@ -75,7 +75,7 @@ class DataManager:
 
 	def get_round_names(self) -> list[str]:
 		"""Get the names of all of the available rounds."""
-		return self.dbRetriever.get_round_info()['RoundName'].tolist()
+		return self.dbRetriever.get_round_info()[shared.COLUMN_ROUND_NAME].tolist()
 
 	def get_archer_data_from_db(
 		self,
@@ -89,7 +89,7 @@ class DataManager:
 			_firstname,
 			_lastname,
 			_birthyear
-		).sort_values('Date')
+		).sort_values(shared.COLUMN_DATE)
 
 	def get_archer_data_from_csv(self, _archer_id: int) -> pd.DataFrame:
 		"""Get all data for a specific archer, sorted by date."""
@@ -103,13 +103,14 @@ class DataManager:
 		_birthyear: int,
 		_sequence_length: int = 12
 	) -> list[float]:
+		"""Get the most recent scores for an archer."""
 		assert(self.usingDB)
 		archer_data = self.get_archer_data_from_db(
 			_firstname,
 			_lastname,
 			_birthyear
 		)
-		return archer_data[shared.COLUMN_SCORE].tail(_sequence_length).to_list()
+		return archer_data[shared.COLUMN_SCORE_FRACTION].tail(_sequence_length).to_list()
 
 	def get_recent_scores_from_csv(
 		self,
@@ -119,7 +120,7 @@ class DataManager:
 		assert(not self.usingDB)
 		"""Get the most recent scores for an archer."""
 		archer_data = self.get_archer_data_from_csv(_archer_id)
-		return archer_data[shared.COLUMN_SCORE].tail(_sequence_length).tolist()
+		return archer_data[shared.COLUMN_SCORE_FRACTION].tail(_sequence_length).tolist()
 
 
 class ModelManager:
@@ -183,7 +184,7 @@ class PlotManager:
 
 		plot.plot(
 			_archer_data[shared.COLUMN_DATE],
-			_archer_data[shared.COLUMN_SCORE],
+			_archer_data[shared.COLUMN_SCORE_FRACTION],
 			'o-',
 			color='blue',
 			label=f'Archer {_archer_label} - Historical',
@@ -207,7 +208,7 @@ class PlotManager:
 		# Historical data
 		plot.plot(
 			_archer_data[shared.COLUMN_DATE],
-			_archer_data[shared.COLUMN_SCORE],
+			_archer_data[shared.COLUMN_SCORE_FRACTION],
 			'o-',
 			color='blue',
 			label=f'Archer {_archer_id} - Historical',
@@ -228,7 +229,7 @@ class PlotManager:
 
 		# Connection line
 		last_date = _archer_data[shared.COLUMN_DATE].iloc[-1]
-		last_score = _archer_data[shared.COLUMN_SCORE].iloc[-1]
+		last_score = _archer_data[shared.COLUMN_SCORE_FRACTION].iloc[-1]
 		plot.plot(
 			[last_date, current_date],  # type: ignore
 			[last_score,
@@ -255,7 +256,7 @@ class PlotManager:
 
 	def _setup_plot(self, _plot, _title: str):
 		"""Common plot setup operations."""
-		_plot.set_xlabel('Date')
+		_plot.set_xlabel(shared.COLUMN_DATE)
 		_plot.set_ylabel('Score Fraction')
 		_plot.set_title(_title)
 		_plot.legend()

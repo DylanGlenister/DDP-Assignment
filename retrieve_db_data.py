@@ -63,17 +63,17 @@ class DB_Retriever:
 			'RoundName': max_scores_dict.keys(),
 			'MaxScore': max_scores_dict.values()
 		}
-		print(output_max)
+		#print(output_max)
 
 		output = {
-			"ArcherID":         [],
-			"Date":             [],
-			"ScoreFraction":    []
+			'ArcherID':         [],
+			'Date':             [],
+			'ScoreFraction':    []
 		}
 		for entry in total_scores:
-			output["ArcherID"].append(entry[0])
-			output["Date"].append(entry[1])
-			output["ScoreFraction"].append(float(entry[2]/max_scores_dict[entry[3]]))
+			output['ArcherID'].append(entry[0])
+			output['Date'].append(entry[1])
+			output['ScoreFraction'].append(float(entry[2]/max_scores_dict[entry[3]]))
 
 		connection.close()
 		return (pd.DataFrame(output), pd.DataFrame(output_max))
@@ -87,9 +87,13 @@ def main():
 		SETTINGS.database_password
 	)
 
-	print(retriever.get_scores('Moselle', 'Speachley', 1986))
+	result = retriever.get_scores('Moselle', 'Speachley', 1986)
 
-	return
+	if result is not None:
+		a, b = result
+		print(a)
+		print(b)
+
 
 if __name__ == "__main__":
 	main()

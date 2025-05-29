@@ -292,9 +292,7 @@ class ArcheryPredictor:
 		if _data_filepath is None:
 			_data_filepath = shared.PATH_DATASET
 
-		print('=' * 60)
 		print(f'Processing {shared.MODEL_DISPLAY_NAMES[self.model_type]} Model')
-		print('=' * 60)
 
 		# Try to load existing model unless forced to retrain
 		if not _force_retrain and self._load_model():

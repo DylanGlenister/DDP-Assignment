@@ -1,5 +1,5 @@
 """
-File for training machine learning models on acrhery scores.
+	File for training machine learning models on acrhery scores.
 """
 import warnings
 

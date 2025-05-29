@@ -1,23 +1,44 @@
 """
-+========================================================+
-|                        Title                           |
-|                                                        |
-|  +--------------------------------------------------+  |
-|  |                                                  |  |
-|  |      Use Matplotlib to display a graph of        |  |
-|  |       their historical scores and then a         |  |
-|  |        prediction of their future score          |  |
-|  |                                                  |  |
-|  +--------------------------------------------------+  |
-|                                                        |
-|    Enter firstname:     [ENTRY BOX       ]             |
-|    Enter lastname:      [ENTRY BOX       ]             |
-|    Enter year of birth: [ENTRY BOX       ]             |
-|    Select round:        [ROUND DROPDOWN  ]V            |
-|    Select model:        [MODEL DROPDOWN  ]V            |
-|  [Load previous scores] [Calculate score expectation]  |
-|                    Message                             |
-+--------------------------------------------------------+
+	Create a gui to use the program.
+
+	When using database:
+	+========================================================+
+	|                        Title                           |
+	|                                                        |
+	|  +--------------------------------------------------+  |
+	|  |                                                  |  |
+	|  |      Use Matplotlib to display a graph of        |  |
+	|  |       their historical scores and then a         |  |
+	|  |        prediction of their future score          |  |
+	|  |                                                  |  |
+	|  +--------------------------------------------------+  |
+	|                                                        |
+	|      Enter firstname:   [ENTRY BOX       ]             |
+	|      Enter lastname:    [ENTRY BOX       ]             |
+	|      Enter birthyear:   [ENTRY BOX       ]             |
+	|      Select round:      [ROUND DROPDOWN  ]V            |
+	|      Select model:      [MODEL DROPDOWN  ]V            |
+	|  [Load previous scores] [Calculate score expectation]  |
+	|                     Message                            |
+	+--------------------------------------------------------+
+
+	When using csv:
+	+========================================================+
+	|                        Title                           |
+	|                                                        |
+	|  +--------------------------------------------------+  |
+	|  |                                                  |  |
+	|  |      Use Matplotlib to display a graph of        |  |
+	|  |       their historical scores and then a         |  |
+	|  |        prediction of their future score          |  |
+	|  |                                                  |  |
+	|  +--------------------------------------------------+  |
+	|                                                        |
+	|    Select archer:       [ARCHER DROPDOWN ]V            |
+	|    Select model:        [MODEL DROPDOWN  ]V            |
+	|  [Load previous scores] [Calculate score expectation]  |
+	|                     Message                            |
+	+--------------------------------------------------------+
 """
 
 import sys
@@ -42,8 +63,6 @@ from retrieve_db_data import DB_Retriever
 
 class DataManager:
 	"""Handles all management of data operations."""
-	# TODO
-
 	def __init__(self, _useDB: bool = True):
 		self.usingDB=_useDB
 		if self.usingDB:
@@ -54,14 +73,52 @@ class DataManager:
 			self.archer_ids = sorted(self.data[shared.COLUMN_ARCHER_ID].unique())
 			print(f'Loaded data for {len(self.archer_ids)} archers with {len(self.data)} total records')
 
-	def get_archer_data(self, _archer_id: int) -> pd.DataFrame:
+	def get_round_names(self) -> list[str]:
+		"""Get the names of all of the available rounds."""
+		return self.dbRetriever.get_round_info()['RoundName'].tolist()
+
+	def get_archer_data_from_db(
+		self,
+		_firstname: str,
+		_lastname: str,
+		_birthyear: int
+	) -> pd.DataFrame:
+		"""Get all data for a specific archer, sorted by date."""
+		assert(self.usingDB)
+		return self.dbRetriever.get_scores_as_fraction(
+			_firstname,
+			_lastname,
+			_birthyear
+		).sort_values('Date')
+
+	def get_archer_data_from_csv(self, _archer_id: int) -> pd.DataFrame:
 		"""Get all data for a specific archer, sorted by date."""
 		assert(not self.usingDB)
 		return self.data[self.data[shared.COLUMN_ARCHER_ID] == _archer_id].sort_values(shared.COLUMN_DATE)
 
-	def get_recent_scores(self, _archer_id: int, _sequence_length: int = 12) -> list[float]:
+	def get_recent_scores_from_db(
+		self,
+		_firstname: str,
+		_lastname: str,
+		_birthyear: int,
+		_sequence_length: int = 12
+	) -> list[float]:
+		assert(self.usingDB)
+		archer_data = self.get_archer_data_from_db(
+			_firstname,
+			_lastname,
+			_birthyear
+		)
+		return archer_data[shared.COLUMN_SCORE].tail(_sequence_length).to_list()
+
+	def get_recent_scores_from_csv(
+		self,
+		_archer_id: int,
+		_sequence_length: int = 12
+	) -> list[float]:
+		assert(not self.usingDB)
 		"""Get the most recent scores for an archer."""
-		archer_data = self.get_archer_data(_archer_id)
+		archer_data = self.get_archer_data_from_csv(_archer_id)
 		return archer_data[shared.COLUMN_SCORE].tail(_sequence_length).tolist()
 
 
@@ -119,7 +176,7 @@ class PlotManager:
 		"""Clear the current plot."""
 		self.fig.clear()
 
-	def plot_historical_data(self, _archer_data: pd.DataFrame, _archer_id: int):
+	def plot_historical_data(self, _archer_data: pd.DataFrame, _archer_label: str):
 		"""Plot historical data for an archer."""
 		self.clear_plot()
 		plot = self.fig.add_subplot(111)
@@ -129,7 +186,7 @@ class PlotManager:
 			_archer_data[shared.COLUMN_SCORE],
 			'o-',
 			color='blue',
-			label=f'Archer {_archer_id} - Historical',
+			label=f'Archer {_archer_label} - Historical',
 			linewidth=2
 		)
 
@@ -216,7 +273,10 @@ class ArcheryPredictionGUI:
 
 		self.root = tk.Tk()
 		self.root.title('Archery Score Prediction System')
-		self.root.geometry('800x900')
+		if _useDB:
+			self.root.geometry('800x1000')
+		else:
+			self.root.geometry('800x900')
 
 		self._setup_ui()
 		self._update_initial_status()
@@ -248,39 +308,83 @@ class ArcheryPredictionGUI:
 	def _setup_controls(self, _parent):
 		"""Setup input controls and buttons."""
 		input_frame = tk.Frame(_parent)
-		input_frame.pack(fill=tk.X, pady=10)
+		input_frame.pack(fill=tk.X, pady=5)
 
 		if self.data_manager.usingDB:
-			# TODO
-			pass
+			# Firstname entry box
+			firstname_frame = tk.Frame(input_frame)
+			firstname_frame.pack(pady=2)
+			tk.Label(
+				firstname_frame,
+				text='Enter firstname:',
+				anchor=tk.W, width=15
+			).pack(side=tk.LEFT, padx=(20, 10))
+			self.firstname_entry = tk.Entry(firstname_frame)
+			self.firstname_entry.pack(side=tk.LEFT)
+			self.firstname_entry.focus()
+
+			# Lastname entry box
+			lastname_frame = tk.Frame(input_frame)
+			lastname_frame.pack(pady=2)
+			tk.Label(
+				lastname_frame,
+				text='Enter lastname:',
+				anchor=tk.W, width=15
+			).pack(side=tk.LEFT, padx=(20, 10))
+			self.lastname_entry = tk.Entry(lastname_frame)
+			self.lastname_entry.pack(side=tk.LEFT)
+
+			# Year of birth selection
+			birthyear_frame = tk.Frame(input_frame)
+			birthyear_frame.pack(pady=2)
+			tk.Label(
+				birthyear_frame,
+				text='Enter birthyear:',
+				anchor=tk.W, width=15
+			).pack(side=tk.LEFT, padx=(20, 10))
+			self.birthyear_combo = ttk.Combobox(
+				birthyear_frame,
+				values=[str(i) for i in range(1900, 2025)]
+			)
+			self.birthyear_combo.pack(side=tk.LEFT)
+
+			# Round selection
+			round_frame = tk.Frame(input_frame)
+			round_frame.pack(pady=2)
+			tk.Label(
+				round_frame,
+				text='Select round:',
+				anchor=tk.W, width=15
+			).pack(side=tk.LEFT, padx=(20, 10))
+			self.round_combo = ttk.Combobox(
+				round_frame,
+				values=self.data_manager.get_round_names()
+			)
+			self.round_combo.current(0)
+			self.round_combo.pack(side=tk.LEFT)
 		else:
 			# Archer selection
 			archer_frame = tk.Frame(input_frame)
-			archer_frame.pack(pady=5)
-
+			archer_frame.pack(pady=2)
 			tk.Label(
 				archer_frame,
 				text='Select archer:',
 				anchor=tk.W, width=15
 			).pack(side=tk.LEFT, padx=(20, 10))
 			self.archer_combo = ttk.Combobox(archer_frame, values=self.data_manager.archer_ids)
-			if self.data_manager.archer_ids:
-				self.archer_combo.current(0)
+			self.archer_combo.current(0)
 			self.archer_combo.pack(side=tk.LEFT)
 
 		# Model selection
 		model_frame = tk.Frame(input_frame)
-		model_frame.pack(pady=5)
-
+		model_frame.pack(pady=2)
 		tk.Label(
 			model_frame,
 			text='Select model:',
 			anchor=tk.W, width=15
 		).pack(side=tk.LEFT, padx=(20, 10))
 		self.model_combo = ttk.Combobox(model_frame, values=self.model_manager.get_display_names())
-		available_models = self.model_manager.get_display_names()
-		if available_models:
-			self.model_combo.current(0)
+		self.model_combo.current(0)
 		self.model_combo.pack(side=tk.LEFT)
 
 		# Buttons
@@ -320,8 +424,26 @@ class ArcheryPredictionGUI:
 			else:
 				self._update_status('Warning: No models loaded. Please check model files.', 'red')
 
+	def _get_firstname(self) -> str:
+		"""Get the value entered into the firstname textbox."""
+		return self.firstname_entry.get()
+
+	def _get_lastname(self) -> str:
+		"""Get the value entered into the lastname textbox."""
+		return self.lastname_entry.get()
+
+	def _get_birthyear(self) -> int:
+		"""Get the value entered into the year of birth textbox."""
+		return int(self.birthyear_combo.get())
+
+	def _get_round(self) -> str:
+		"""Get the currently selected round."""
+		return self.round_combo.get()
+
 	def _get_selected_archer(self) -> int:
-		"""Get the currently selected archer ID."""
+		"""Get the currently selected archer ID.
+		Archer combobox not available when using db"""
+		assert(not self.data_manager.usingDB)
 		return int(self.archer_combo.get())
 
 	def _get_selected_model(self) -> str:
@@ -330,22 +452,29 @@ class ArcheryPredictionGUI:
 
 	def load_historical_data(self):
 		"""Load and display historical scores for the selected archer."""
-		try:
-			self._update_status('Loading historical scores...')
+		self._update_status('Loading historical scores...')
 
+		try:
 			if self.data_manager.usingDB:
-				# TODO
-				pass
+				archer_data = self.data_manager.get_archer_data_from_db(
+					self._get_firstname(),
+					self._get_lastname(),
+					self._get_birthyear()
+				)
+				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID][0])
 			else:
 				archer_id = self._get_selected_archer()
-				archer_data = self.data_manager.get_archer_data(archer_id)
+				archer_data = self.data_manager.get_archer_data_from_csv(archer_id)
 
-				if archer_data.empty:
-					self._update_status(f'No data found for archer {archer_id}', 'red')
-					return
+			if archer_data.empty:
+				self._update_status(f'No data found for archer {archer_id}', 'red')
+				return
 
-				self.plot_manager.plot_historical_data(archer_data, archer_id)
-				self._update_status('Historical scores loaded successfully', 'green')
+			self.plot_manager.plot_historical_data(
+				archer_data,
+				str(archer_id)
+			)
+			self._update_status('Historical scores loaded successfully', 'green')
 
 		except Exception as e:
 			error_msg = f'Error loading historical data: {e}'
@@ -357,34 +486,46 @@ class ArcheryPredictionGUI:
 		try:
 			self._update_status('Calculating prediction...')
 
+			model_name = self._get_selected_model()
+			if not model_name:
+				self._update_status('No model selected', 'red')
+				return
+
 			if self.data_manager.usingDB:
-				# TODO
-				pass
+				archer_data = self.data_manager.get_archer_data_from_db(
+					self._get_firstname(),
+					self._get_lastname(),
+					self._get_birthyear()
+				)
+				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID][0])
+				recent_scores = self.data_manager.get_recent_scores_from_db(
+					self._get_firstname(),
+					self._get_lastname(),
+					self._get_birthyear()
+				)
 			else:
 				archer_id = self._get_selected_archer()
-				model_name = self._get_selected_model()
+				archer_data = self.data_manager.get_archer_data_from_csv(archer_id)
+				recent_scores = self.data_manager.get_recent_scores_from_csv(archer_id)
 
-				if not model_name:
-					self._update_status('No model selected', 'red')
-					return
+			if not recent_scores:
+				self._update_status(f'No score data available for archer {archer_id}', 'red')
+				return
 
-				# Get data and make prediction
-				recent_scores = self.data_manager.get_recent_scores(archer_id)
+			predictor = self.model_manager.get_predictor(model_name)
+			predicted_score = predictor.predict_score(archer_id, recent_scores)
 
-				if not recent_scores:
-					self._update_status(f'No score data available for archer {archer_id}', 'red')
-					return
+			# Update plot
+			self.plot_manager.plot_with_prediction(
+				archer_data,
+				archer_id,
+				predicted_score,
+				model_name
+			)
 
-				predictor = self.model_manager.get_predictor(model_name)
-				predicted_score = predictor.predict_score(archer_id, recent_scores)
-
-				# Update plot
-				archer_data = self.data_manager.get_archer_data(archer_id)
-				self.plot_manager.plot_with_prediction(archer_data, archer_id, predicted_score, model_name)
-
-				success_msg = f'Prediction complete: {predicted_score:.4f} (using {model_name} model)'
-				print(success_msg)
-				self._update_status(success_msg, 'green')
+			success_msg = f'Prediction complete: {predicted_score:.4f} (using {model_name} model)'
+			print(success_msg)
+			self._update_status(success_msg, 'green')
 
 		except Exception as e:
 			error_msg = f'Error calculating prediction: {e}'

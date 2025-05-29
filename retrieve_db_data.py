@@ -11,7 +11,7 @@ from settings import SETTINGS
 class DB_Retriever:
 	def __init__(self):
 		self.host = SETTINGS.database_host
-		self.database = SETTINGS.database
+		self.database = SETTINGS.database_name
 		self.db_username = SETTINGS.database_username
 		self.db_password = SETTINGS.database_password
 

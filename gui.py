@@ -69,7 +69,7 @@ class ModelManager:
 			return predictor
 		else:
 			print(f'Failed to load {_model_type} model')
-			return None
+			return
 
 	def _load_all_models(self):
 		"""Load all available models."""

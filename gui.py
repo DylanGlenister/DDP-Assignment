@@ -10,17 +10,20 @@
 |  |                                                  |  |
 |  +--------------------------------------------------+  |
 |                                                        |
-|   Select archer:        [ARCHER DROPDOWN ]V            |
-|   Select model:         [MODEL DROPDOWN  ]V            |
+|    Enter firstname:     [ENTRY BOX       ]             |
+|    Enter lastname:      [ENTRY BOX       ]             |
+|    Enter year of birth: [ENTRY BOX       ]             |
+|    Select round:        [ROUND DROPDOWN  ]V            |
+|    Select model:        [MODEL DROPDOWN  ]V            |
 |  [Load previous scores] [Calculate score expectation]  |
-|                                                        |
+|                    Message                             |
 +--------------------------------------------------------+
 """
 
+import sys
 import tkinter as tk
 import tkinter.ttk as ttk
 from datetime import datetime
-from typing import Dict, List, Optional
 
 import matplotlib
 import pandas as pd
@@ -28,28 +31,35 @@ import pandas as pd
 matplotlib.use('TkAgg')
 
 from matplotlib.backends.backend_tkagg import \
-	NavigationToolbar2Tk  # type: ignore
+    NavigationToolbar2Tk  # type: ignore
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 import machine_learning as ml
 import shared
+from retrieve_db_data import DB_Retriever
 
 
 class DataManager:
-	"""Handles all data loading and processing operations."""
+	"""Handles all management of data operations."""
+	# TODO
 
-	def __init__(self, _csv_path: str):
-		self.data = pd.read_csv(_csv_path)
-		self.data[shared.COLUMN_DATE] = pd.to_datetime(self.data[shared.COLUMN_DATE])
-		self.archer_ids = sorted(self.data[shared.COLUMN_ARCHER_ID].unique())
-		print(f'Loaded data for {len(self.archer_ids)} archers with {len(self.data)} total records')
+	def __init__(self, _useDB: bool = True):
+		self.usingDB=_useDB
+		if self.usingDB:
+			self.dbRetriever = DB_Retriever()
+		else:
+			self.data = pd.read_csv(shared.PATH_DATASET)
+			self.data[shared.COLUMN_DATE] = pd.to_datetime(self.data[shared.COLUMN_DATE])
+			self.archer_ids = sorted(self.data[shared.COLUMN_ARCHER_ID].unique())
+			print(f'Loaded data for {len(self.archer_ids)} archers with {len(self.data)} total records')
 
 	def get_archer_data(self, _archer_id: int) -> pd.DataFrame:
 		"""Get all data for a specific archer, sorted by date."""
+		assert(not self.usingDB)
 		return self.data[self.data[shared.COLUMN_ARCHER_ID] == _archer_id].sort_values(shared.COLUMN_DATE)
 
-	def get_recent_scores(self, _archer_id: int, _sequence_length: int = 12) -> List[float]:
+	def get_recent_scores(self, _archer_id: int, _sequence_length: int = 12) -> list[float]:
 		"""Get the most recent scores for an archer."""
 		archer_data = self.get_archer_data(_archer_id)
 		return archer_data[shared.COLUMN_SCORE].tail(_sequence_length).tolist()
@@ -59,10 +69,10 @@ class ModelManager:
 	"""Handles loading and managing prediction models."""
 
 	def __init__(self):
-		self.predictors: Dict[str, ml.ArcheryPredictor] = {}
+		self.predictors: dict[str, ml.ArcheryPredictor] = {}
 		self._load_all_models()
 
-	def _load_single_model(self, _model_type: str) -> Optional[ml.ArcheryPredictor]:
+	def _load_single_model(self, _model_type: str) -> ml.ArcheryPredictor | None:
 		"""Load a single model of the specified type."""
 		predictor = ml.ArcheryPredictor(_sequence_length=12, _model_type=_model_type)
 		if predictor.load_or_train():
@@ -88,7 +98,7 @@ class ModelManager:
 			raise ValueError(f'Model {_model_display_name} not available')
 		return predictor
 
-	def get_display_names(self) -> List[str]:
+	def get_display_names(self) -> list[str]:
 		"""Get list of available model display names."""
 		return [name for key, name in shared.MODEL_DISPLAY_NAMES.items() if self.predictors[key] is not None]
 
@@ -200,8 +210,8 @@ class PlotManager:
 class ArcheryPredictionGUI:
 	"""Main application class that coordinates all components."""
 
-	def __init__(self):
-		self.data_manager = DataManager(shared.PATH_DATASET)
+	def __init__(self, _useDB: bool = True):
+		self.data_manager = DataManager(_useDB)
 		self.model_manager = ModelManager()
 
 		self.root = tk.Tk()
@@ -240,19 +250,23 @@ class ArcheryPredictionGUI:
 		input_frame = tk.Frame(_parent)
 		input_frame.pack(fill=tk.X, pady=10)
 
-		# Archer selection
-		archer_frame = tk.Frame(input_frame)
-		archer_frame.pack(pady=5)
+		if self.data_manager.usingDB:
+			# TODO
+			pass
+		else:
+			# Archer selection
+			archer_frame = tk.Frame(input_frame)
+			archer_frame.pack(pady=5)
 
-		tk.Label(
-			archer_frame,
-			text='Select archer:',
-			anchor=tk.W, width=15
-		).pack(side=tk.LEFT, padx=(20, 10))
-		self.archer_combo = ttk.Combobox(archer_frame, values=self.data_manager.archer_ids)
-		if self.data_manager.archer_ids:
-			self.archer_combo.current(0)
-		self.archer_combo.pack(side=tk.LEFT)
+			tk.Label(
+				archer_frame,
+				text='Select archer:',
+				anchor=tk.W, width=15
+			).pack(side=tk.LEFT, padx=(20, 10))
+			self.archer_combo = ttk.Combobox(archer_frame, values=self.data_manager.archer_ids)
+			if self.data_manager.archer_ids:
+				self.archer_combo.current(0)
+			self.archer_combo.pack(side=tk.LEFT)
 
 		# Model selection
 		model_frame = tk.Frame(input_frame)
@@ -319,15 +333,19 @@ class ArcheryPredictionGUI:
 		try:
 			self._update_status('Loading historical scores...')
 
-			archer_id = self._get_selected_archer()
-			archer_data = self.data_manager.get_archer_data(archer_id)
+			if self.data_manager.usingDB:
+				# TODO
+				pass
+			else:
+				archer_id = self._get_selected_archer()
+				archer_data = self.data_manager.get_archer_data(archer_id)
 
-			if archer_data.empty:
-				self._update_status(f'No data found for archer {archer_id}', 'red')
-				return
+				if archer_data.empty:
+					self._update_status(f'No data found for archer {archer_id}', 'red')
+					return
 
-			self.plot_manager.plot_historical_data(archer_data, archer_id)
-			self._update_status('Historical scores loaded successfully', 'green')
+				self.plot_manager.plot_historical_data(archer_data, archer_id)
+				self._update_status('Historical scores loaded successfully', 'green')
 
 		except Exception as e:
 			error_msg = f'Error loading historical data: {e}'
@@ -339,30 +357,34 @@ class ArcheryPredictionGUI:
 		try:
 			self._update_status('Calculating prediction...')
 
-			archer_id = self._get_selected_archer()
-			model_name = self._get_selected_model()
+			if self.data_manager.usingDB:
+				# TODO
+				pass
+			else:
+				archer_id = self._get_selected_archer()
+				model_name = self._get_selected_model()
 
-			if not model_name:
-				self._update_status('No model selected', 'red')
-				return
+				if not model_name:
+					self._update_status('No model selected', 'red')
+					return
 
-			# Get data and make prediction
-			recent_scores = self.data_manager.get_recent_scores(archer_id)
+				# Get data and make prediction
+				recent_scores = self.data_manager.get_recent_scores(archer_id)
 
-			if not recent_scores:
-				self._update_status(f'No score data available for archer {archer_id}', 'red')
-				return
+				if not recent_scores:
+					self._update_status(f'No score data available for archer {archer_id}', 'red')
+					return
 
-			predictor = self.model_manager.get_predictor(model_name)
-			predicted_score = predictor.predict_score(archer_id, recent_scores)
+				predictor = self.model_manager.get_predictor(model_name)
+				predicted_score = predictor.predict_score(archer_id, recent_scores)
 
-			# Update plot
-			archer_data = self.data_manager.get_archer_data(archer_id)
-			self.plot_manager.plot_with_prediction(archer_data, archer_id, predicted_score, model_name)
+				# Update plot
+				archer_data = self.data_manager.get_archer_data(archer_id)
+				self.plot_manager.plot_with_prediction(archer_data, archer_id, predicted_score, model_name)
 
-			success_msg = f'Prediction complete: {predicted_score:.4f} (using {model_name} model)'
-			print(success_msg)
-			self._update_status(success_msg, 'green')
+				success_msg = f'Prediction complete: {predicted_score:.4f} (using {model_name} model)'
+				print(success_msg)
+				self._update_status(success_msg, 'green')
 
 		except Exception as e:
 			error_msg = f'Error calculating prediction: {e}'
@@ -376,7 +398,12 @@ class ArcheryPredictionGUI:
 
 def main():
 	"""Main entry point."""
-	app = ArcheryPredictionGUI()
+
+	usedb = True
+	if len(sys.argv) > 1 and sys.argv[1] == '--use_csv':
+		usedb = False
+
+	app = ArcheryPredictionGUI(usedb)
 	app.run()
 
 

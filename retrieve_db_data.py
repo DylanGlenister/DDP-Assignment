@@ -9,11 +9,11 @@ from pymysql.connections import Connection
 from settings import SETTINGS
 
 class DB_Retriever:
-	def __init__(self, _host: str, _database: str, _username: str, _password: str):
-		self.host = _host
-		self.database = _database
-		self.db_username = _username
-		self.db_password = _password
+	def __init__(self):
+		self.host = SETTINGS.database_host
+		self.database = SETTINGS.database
+		self.db_username = SETTINGS.database_username
+		self.db_password = SETTINGS.database_password
 
 	def _get_connection(self) -> Connection | None:
 		"""Helper method to establish database connection"""
@@ -156,12 +156,7 @@ class DB_Retriever:
 
 
 def main():
-	retriever = DB_Retriever(
-		SETTINGS.database_host,
-		SETTINGS.database,
-		SETTINGS.database_username,
-		SETTINGS.database_password
-	)
+	retriever = DB_Retriever()
 
 	firstname = 'Moselle'
 	lastname = 'Speachley'

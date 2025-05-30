@@ -120,14 +120,16 @@ class DataManager:
 		self,
 		_firstname: str,
 		_lastname: str,
-		_birthyear: int
+		_birthyear: int,
+		_round: str | None = None
 	) -> pd.DataFrame:
 		"""Get all data for a specific archer, sorted by date."""
 		assert(self.usingDB)
 		return self.dbRetriever.get_scores_as_fraction(
 			_firstname,
 			_lastname,
-			_birthyear
+			_birthyear,
+			_round
 		).sort_values(shared.COLUMN_DATE)
 
 	def get_recent_scores_from_db(
@@ -135,14 +137,15 @@ class DataManager:
 		_firstname: str,
 		_lastname: str,
 		_birthyear: int,
+		_round: str | None = None,
 		_sequence_length: int = 12
 	) -> list[float]:
 		"""Get the most recent scores for an archer."""
-		assert(self.usingDB)
 		archer_data = self.get_archer_data_from_db(
 			_firstname,
 			_lastname,
-			_birthyear
+			_birthyear,
+			_round
 		)
 		return archer_data[shared.COLUMN_SCORE_FRACTION].tail(_sequence_length).to_list()
 
@@ -158,7 +161,6 @@ class DataManager:
 		_archer_id: int,
 		_sequence_length: int = 12
 	) -> list[float]:
-		assert(not self.usingDB)
 		"""Get the most recent scores for an archer."""
 		archer_data = self.get_archer_data_from_csv(_archer_id)
 		return archer_data[shared.COLUMN_SCORE_FRACTION].tail(_sequence_length).tolist()
@@ -482,7 +484,8 @@ class ArcheryPredictionGUI:
 				archer_data = self.data_manager.get_archer_data_from_db(
 					self._get_firstname(),
 					self._get_lastname(),
-					self._get_birthyear()
+					self._get_birthyear(),
+					self._get_round()
 				)
 				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID][0])
 
@@ -512,7 +515,7 @@ class ArcheryPredictionGUI:
 			self._update_status(error_msg, 'red')
 
 		except KeyError as e:
-			error_msg = f'Error loading historical data: No archer matching these details found'
+			error_msg = f'Error loading historical data: No data matching these details found'
 			print(error_msg)
 			self._update_status(error_msg, 'red')
 
@@ -532,16 +535,22 @@ class ArcheryPredictionGUI:
 				return
 
 			if self.data_manager.usingDB:
+				firstname = self._get_firstname()
+				lastname = self._get_lastname()
+				birthyear = self._get_birthyear()
+				round = self._get_round()
 				archer_data = self.data_manager.get_archer_data_from_db(
-					self._get_firstname(),
-					self._get_lastname(),
-					self._get_birthyear()
+					firstname,
+					lastname,
+					birthyear,
+					round
 				)
 				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID][0])
 				recent_scores = self.data_manager.get_recent_scores_from_db(
-					self._get_firstname(),
-					self._get_lastname(),
-					self._get_birthyear()
+					firstname,
+					lastname,
+					birthyear,
+					round
 				)
 			else:
 				try:
@@ -579,7 +588,7 @@ class ArcheryPredictionGUI:
 			self._update_status(error_msg, 'red')
 
 		except KeyError as e:
-			error_msg = f'Error calculating prediction: No archer matching these details found'
+			error_msg = f'Error calculating prediction: No data matching these details found'
 			print(error_msg)
 			self._update_status(error_msg, 'red')
 

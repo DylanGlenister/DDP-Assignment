@@ -32,7 +32,13 @@ class DB_Retriever:
 			print(f'Failed to connect: {e}')
 			raise ConnectionError(f'Could not connect to the database: {e}')
 
-	def get_archer_scores(self, _firstname: str, _lastname: str, _birthyear: int) -> pd.DataFrame:
+	def get_archer_scores(
+		self,
+		_firstname: str,
+		_lastname: str,
+		_birthyear: int,
+		_round: str | None = None
+	) -> pd.DataFrame:
 		"""
 		Retrieve archer scores from the database
 
@@ -40,44 +46,82 @@ class DB_Retriever:
 			_firstname: Archer's first name
 			_lastname: Archer's last name
 			_birthyear: Archer's birth year
+			_round: Optional round filter to apply to results
 
 		Returns:
 			pandas.DataFrame with columns: ArcherID, Date, TotalScore, Round
-			Returns None if no archers found or connection fails
+			Returns empty DataFrame if no archers found or connection fails
 		"""
-		connection = self._get_connection()
+		# Define the empty DataFrame structure once
+		empty_df = pd.DataFrame(columns=[
+			shared.COLUMN_ARCHER_ID,
+			shared.COLUMN_DATE,
+			shared.COLUMN_TOTAL_SCORE,
+			shared.COLUMN_ROUND
+		])
 
-		cursor = connection.cursor()
+		try:
+			connection = self._get_connection()
+			cursor = connection.cursor()
 
-		# Find archer IDs matching the criteria
-		id_query_text = f'SELECT `archerID` FROM `archers` WHERE LOWER(`firstname`) LIKE LOWER(\'{_firstname}%\') AND LOWER(`lastname`) LIKE LOWER(\'{_lastname}%\') AND `yearOfBirth` = {_birthyear};'
+			# Find archer IDs matching the criteria using parameterized query
+			id_query_text = '''
+				SELECT `archerID`
+				FROM `archers`
+				WHERE LOWER(`firstname`) LIKE LOWER(%s)
+				AND LOWER(`lastname`) LIKE LOWER(%s)
+				AND `yearOfBirth` = %s
+			'''
 
-		cursor.execute(id_query_text)
-		ids = cursor.fetchall()
-		if len(ids) == 0:
-			print('Did not find any archers matching the parameters')
-			connection.close()
-			return pd.DataFrame(columns=[shared.COLUMN_ARCHER_ID, shared.COLUMN_DATE, shared.COLUMN_TOTAL_SCORE, shared.COLUMN_ROUND])
+			cursor.execute(id_query_text, (f'{_firstname}%', f'{_lastname}%', _birthyear))
+			ids = cursor.fetchall()
 
-		list_ids = [id_tuple[0] for id_tuple in ids if id_tuple is not None]
-		ids_textformatted = ','.join([str(x) for x in list_ids])
+			if not ids:
+				print('Did not find any archers matching the parameters')
+				return empty_df
 
-		# Get scores for the found archers
-		total_scores_query_text = f'SELECT `archerID`, `date`, `totalScore`, `round` FROM `allRoundScores` WHERE `archerID` in ({ids_textformatted});'
+			# Extract archer IDs safely
+			list_ids = [id_tuple[0] for id_tuple in ids if id_tuple and id_tuple[0] is not None]
 
-		cursor.execute(total_scores_query_text)
-		total_scores = cursor.fetchall()
+			if not list_ids:
+				return empty_df
 
-		# Format output as DataFrame
-		output = {
-			shared.COLUMN_ARCHER_ID: [entry[0] for entry in total_scores],
-			shared.COLUMN_DATE: [entry[1] for entry in total_scores],
-			shared.COLUMN_TOTAL_SCORE: [entry[2] for entry in total_scores],
-			shared.COLUMN_ROUND: [entry[3] for entry in total_scores]
-		}
+			# Get scores for the found archers using parameterized query
+			placeholders = ','.join(['%s' for _ in list_ids])
+			total_scores_query_text = f'''
+				SELECT `archerID`, `date`, `totalScore`, `round`
+				FROM `allRoundScores`
+				WHERE `archerID` IN ({placeholders})
+			'''
 
-		connection.close()
-		return pd.DataFrame(output)
+			cursor.execute(total_scores_query_text, list_ids)
+			total_scores = cursor.fetchall()
+
+			# Create DataFrame directly from query results
+			if not total_scores:
+				return empty_df
+
+			output = pd.DataFrame(total_scores, columns=[
+				shared.COLUMN_ARCHER_ID,
+				shared.COLUMN_DATE,
+				shared.COLUMN_TOTAL_SCORE,
+				shared.COLUMN_ROUND
+			])
+
+			# Apply round filter if specified
+			if _round is not None:
+				output = output[output[shared.COLUMN_ROUND] == _round]
+
+			return output
+
+		except Exception as e:
+			print(f'Error retrieving archer scores: {e}')
+			return empty_df
+
+		finally:
+			# Ensure connection is closed even if an exception occurs
+			if 'connection' in locals():
+				connection.close()  # type: ignore
 
 	def get_round_info(self) -> pd.DataFrame:
 		"""
@@ -85,32 +129,55 @@ class DB_Retriever:
 
 		Returns:
 			pandas.DataFrame with columns: RoundName, MaxScore
-			Returns None if connection fails
+			Returns empty DataFrame if connection fails
 		"""
-		connection = self._get_connection()
+		# Define the empty DataFrame structure for connection failures
+		try:
+			connection = self._get_connection()
+			cursor = connection.cursor()
 
-		cursor = connection.cursor()
+			# Get maximum scores for all rounds
+			max_scores_query = '''
+				SELECT `round_definition`.`name`,
+						SUM(`range_definition`.`ends` * `range_definition`.`arrowsPerEnd` * 10) AS maxScore
+				FROM `round_definition`
+				NATURAL JOIN `range_order`
+				NATURAL JOIN `range_definition`
+				GROUP BY `round_definition`.`roundDefID`
+			'''
 
-		# Get maximum scores for all rounds
-		max_scores_query = f'SELECT `round_definition`.`name`, SUM(`range_definition`.`ends` * `range_definition`.`arrowsPerEnd` * 10) AS maxScore FROM `round_definition` NATURAL JOIN `range_order` NATURAL JOIN `range_definition` GROUP BY `round_definition`.`roundDefID`;'
+			cursor.execute(max_scores_query)
+			max_scores = cursor.fetchall()
 
-		cursor.execute(max_scores_query)
-		max_scores = cursor.fetchall()
+			# Create DataFrame directly from query results
+			output = pd.DataFrame(max_scores, columns=[
+				shared.COLUMN_ROUND_NAME,
+				shared.COLUMN_MAX_SCORE
+			])
 
-		# Format output as DataFrame
-		output = {
-			shared.COLUMN_ROUND_NAME: [entry[0] for entry in max_scores],
-			shared.COLUMN_MAX_SCORE: [int(entry[1]) for entry in max_scores]
-		}
+			# Convert MaxScore to int
+			output[shared.COLUMN_MAX_SCORE] = output[shared.COLUMN_MAX_SCORE].astype(int)
 
-		connection.close()
-		return pd.DataFrame(output)
+			return output
+
+		except Exception as e:
+			print(f'Error connecting to database: {e}')
+			return pd.DataFrame(columns=[
+				shared.COLUMN_ROUND_NAME,
+				shared.COLUMN_MAX_SCORE
+			])
+
+		finally:
+			# Ensure connection is closed even if an exception occurs
+			if 'connection' in locals():
+				connection.close()  # type: ignore
 
 	def get_scores_as_fraction(
 		self,
 		_firstname: str,
 		_lastname: str,
-		_birthyear: int
+		_birthyear: int,
+		_round: str | None = None
 	) -> pd.DataFrame:
 		"""
 		Get archer scores with score fractions (score/max_score)
@@ -119,39 +186,65 @@ class DB_Retriever:
 			_firstname: Archer's first name
 			_lastname: Archer's last name
 			_birthyear: Archer's birth year
+			_round: Optional round filter to apply to results
 
 		Returns:
-			tuple of (scores_df, rounds_df) where:
-			- scores_df has columns: ArcherID, Date, ScoreFraction
-			- rounds_df has columns: RoundName, MaxScore
-			Returns None if no data found
+			pandas.DataFrame with columns: ArcherID, Date, ScoreFraction
+			Returns empty DataFrame if no data found or error occurs
 		"""
-		# Get archer scores and round info
-		scores_df = self.get_archer_scores(_firstname, _lastname, _birthyear)
+		# Define the empty DataFrame structure
+		empty_df = pd.DataFrame(columns=[
+			shared.COLUMN_ARCHER_ID,
+			shared.COLUMN_DATE,
+			shared.COLUMN_SCORE_FRACTION
+		])
 
-		if scores_df.empty:
-			return pd.DataFrame(columns=[shared.COLUMN_ARCHER_ID, shared.COLUMN_DATE, shared.COLUMN_SCORE_FRACTION])
+		try:
+			# Get archer scores and round info
+			scores_df = self.get_archer_scores(
+				_firstname,
+				_lastname,
+				_birthyear,
+				_round
+			)
 
-		rounds_df = self.get_round_info()
+			if scores_df.empty:
+				return empty_df
 
-		# Create max scores dictionary for lookup
-		max_scores_dict = dict(zip(rounds_df[shared.COLUMN_ROUND_NAME], rounds_df[shared.COLUMN_MAX_SCORE]))
+			rounds_df = self.get_round_info()
 
-		# Calculate score fractions
-		output = {
-			shared.COLUMN_ARCHER_ID: [],
-			shared.COLUMN_DATE: [],
-			shared.COLUMN_SCORE_FRACTION: []
-		}
+			if rounds_df.empty:
+				print('Warning: No round information available')
+				return empty_df
 
-		for _, row in scores_df.iterrows():
-			round_name = row[shared.COLUMN_ROUND]
-			if round_name in max_scores_dict:
-				output[shared.COLUMN_ARCHER_ID].append(row[shared.COLUMN_ARCHER_ID])
-				output[shared.COLUMN_DATE].append(row[shared.COLUMN_DATE])
-				output[shared.COLUMN_SCORE_FRACTION].append(float(row[shared.COLUMN_TOTAL_SCORE] / max_scores_dict[round_name]))
+			# Create max scores dictionary for lookup
+			max_scores_dict = dict(zip(rounds_df[shared.COLUMN_ROUND_NAME], rounds_df[shared.COLUMN_MAX_SCORE]))
 
-		return pd.DataFrame(output)
+			# Calculate score fractions using vectorized operations
+			valid_scores = scores_df[scores_df[shared.COLUMN_ROUND].isin(max_scores_dict.keys())].copy()
+
+			if valid_scores.empty:
+				print('Warning: No scores found for known rounds')
+				return empty_df
+
+			# Map max scores and calculate fractions
+			valid_scores['max_score'] = valid_scores[shared.COLUMN_ROUND].map(max_scores_dict)
+			valid_scores[shared.COLUMN_SCORE_FRACTION] = (
+				valid_scores[shared.COLUMN_TOTAL_SCORE] / valid_scores['max_score']
+			).astype(float)
+
+			# Return only the required columns
+			output = valid_scores[[
+				shared.COLUMN_ARCHER_ID,
+				shared.COLUMN_DATE,
+				shared.COLUMN_SCORE_FRACTION
+			]].copy()
+
+			return output
+
+		except Exception as e:
+			print(f'Error calculating score fractions: {e}')
+			return empty_df
 
 
 def main():

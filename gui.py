@@ -73,50 +73,24 @@ class DataManager:
 			self.archer_ids = sorted(self.data[shared.COLUMN_ARCHER_ID].unique())
 			print(f'Loaded data for {len(self.archer_ids)} archers with {len(self.data)} total records')
 
-	def get_round_names(self) -> list[str]:
+	def get_round_info(self):
 		"""Get the names of all of the available rounds."""
 		if self.usingDB:
-			return self.dbRetriever.get_round_info()[shared.COLUMN_ROUND_NAME].tolist()
+			return self.dbRetriever.get_round_info()
 		else:
 			# If the database isn't being used, return this cached version
-			return [
-				'WA90/1440',
-				'WA70/1440',
-				'WA60/1440',
-				'AA50/1440',
-				'AA40/1440',
-				'WA70/720',
-				'WA60/720',
-				'WA50/720',
-				'Canberra',
-				'Long Sydney',
-				'Sydney',
-				'Long Brisbane',
-				'Brisbane',
-				'Adelaide',
-				'Short Adelaide',
-				'Hobart',
-				'Perth',
-				'Short Canberra',
-				'Junior Canberra',
-				'Mini Canberra',
-				'Grange',
-				'Melbourne',
-				'Darwin',
-				'Geelong',
-				'Newcastle',
-				'Holt',
-				'Samford',
-				'Drake',
-				'Wollongong',
-				'Townsville',
-				'Launceston',
-				'Full Spread'
-			]
+			return pd.DataFrame({
+				shared.COLUMN_ROUND_NAME: [
+					'WA90/1440', 'WA70/1440', 'WA60/1440', 'AA50/1440', 'AA40/1440', 'WA70/720', 'WA60/720', 'WA50/720', 'Canberra', 'Long Sydney', 'Sydney', 'Long Brisbane', 'Brisbane', 'Adelaide', 'Short Adelaide', 'Hobart', 'Perth', 'Short Canberra', 'Junior Canberra', 'Mini Canberra', 'Grange', 'Melbourne', 'Darwin', 'Geelong', 'Newcastle', 'Holt', 'Samford', 'Drake', 'Wollongong', 'Townsville', 'Launceston', 'Full Spread',
+				],
+				shared.COLUMN_MAX_SCORE: [
+					1440, 1440, 1440, 1440, 1080, 720, 720, 720, 900, 1200, 1200, 1200, 1200, 1200, 1200, 900, 900, 900, 900, 900, 900, 900, 900, 900, 900, 900, 900, 900, 720, 720, 720, 1200
+				]
+			})
 
-	# === Data from DB ===
+	# === Fractional data from DB ===
 
-	def get_archer_data_from_db(
+	def get_fractional_scores_from_db(
 		self,
 		_firstname: str,
 		_lastname: str,
@@ -132,7 +106,7 @@ class DataManager:
 			_round
 		).sort_values(shared.COLUMN_DATE)
 
-	def get_recent_scores_from_db(
+	def get_recent_fractional_scores_from_db(
 		self,
 		_firstname: str,
 		_lastname: str,
@@ -141,29 +115,29 @@ class DataManager:
 		_sequence_length: int = 12
 	) -> list[float]:
 		"""Get the most recent scores for an archer."""
-		archer_data = self.get_archer_data_from_db(
+		archer_data = self.get_fractional_scores_from_db(
 			_firstname,
 			_lastname,
 			_birthyear,
 			_round
 		)
-		return archer_data[shared.COLUMN_SCORE_FRACTION].tail(_sequence_length).to_list()
+		return archer_data[shared.COLUMN_SCORE].tail(_sequence_length).to_list()
 
 	# === Data from CSV ===
 
-	def get_archer_data_from_csv(self, _archer_id: int) -> pd.DataFrame:
+	def get_fractional_scores_from_csv(self, _archer_id: int) -> pd.DataFrame:
 		"""Get all data for a specific archer, sorted by date."""
 		assert(not self.usingDB)
 		return self.data[self.data[shared.COLUMN_ARCHER_ID] == _archer_id].sort_values(shared.COLUMN_DATE)
 
-	def get_recent_scores_from_csv(
+	def get_recent_fractional_scores_from_csv(
 		self,
 		_archer_id: int,
 		_sequence_length: int = 12
 	) -> list[float]:
 		"""Get the most recent scores for an archer."""
-		archer_data = self.get_archer_data_from_csv(_archer_id)
-		return archer_data[shared.COLUMN_SCORE_FRACTION].tail(_sequence_length).tolist()
+		archer_data = self.get_fractional_scores_from_csv(_archer_id)
+		return archer_data[shared.COLUMN_SCORE].tail(_sequence_length).tolist()
 
 
 class ModelManager:
@@ -220,14 +194,18 @@ class PlotManager:
 		"""Clear the current plot."""
 		self.fig.clear()
 
-	def plot_historical_data(self, _archer_data: pd.DataFrame, _archer_label: str):
+	def plot_historical_data(
+		self,
+		_archer_data: pd.DataFrame,
+		_archer_label: str
+	):
 		"""Plot historical data for an archer."""
 		self.clear_plot()
 		plot = self.fig.add_subplot(111)
 
 		plot.plot(
 			_archer_data[shared.COLUMN_DATE],
-			_archer_data[shared.COLUMN_SCORE_FRACTION],
+			_archer_data[shared.COLUMN_SCORE],
 			'o-',
 			color='blue',
 			label=f'Archer {_archer_label} - Historical',
@@ -238,12 +216,12 @@ class PlotManager:
 		self.canvas.draw()
 
 	def plot_with_prediction(
-			self,
-			_archer_data: pd.DataFrame,
-			_archer_id: int,
-			_predicted_score: float,
-			_model_name: str
-		):
+		self,
+		_archer_data: pd.DataFrame,
+		_archer_id: int,
+		_predicted_score: float,
+		_model_name: str
+	):
 		"""Plot historical data with prediction."""
 		self.clear_plot()
 		plot = self.fig.add_subplot(111)
@@ -251,7 +229,7 @@ class PlotManager:
 		# Historical data
 		plot.plot(
 			_archer_data[shared.COLUMN_DATE],
-			_archer_data[shared.COLUMN_SCORE_FRACTION],
+			_archer_data[shared.COLUMN_SCORE],
 			'o-',
 			color='blue',
 			label=f'Archer {_archer_id} - Historical',
@@ -272,7 +250,7 @@ class PlotManager:
 
 		# Connection line
 		last_date = _archer_data[shared.COLUMN_DATE].iloc[-1]
-		last_score = _archer_data[shared.COLUMN_SCORE_FRACTION].iloc[-1]
+		last_score = _archer_data[shared.COLUMN_SCORE].iloc[-1]
 		plot.plot(
 			[last_date, current_date],  # type: ignore
 			[last_score,
@@ -300,7 +278,7 @@ class PlotManager:
 	def _setup_plot(self, _plot, _title: str):
 		"""Common plot setup operations."""
 		_plot.set_xlabel(shared.COLUMN_DATE)
-		_plot.set_ylabel('Score Fraction')
+		_plot.set_ylabel('Score')
 		_plot.set_title(_title)
 		_plot.legend()
 		_plot.grid(True, alpha=0.3)
@@ -399,7 +377,7 @@ class ArcheryPredictionGUI:
 			text='Select round:',
 			anchor=tk.W, width=15
 		).pack(side=tk.LEFT, padx=(20, 10))
-		round_values = self.data_manager.get_round_names()
+		round_values = self.data_manager.get_round_info()[shared.COLUMN_ROUND_NAME].to_list()
 		round_values.insert(0, 'All')
 		self.round_combo = ttk.Combobox(
 			round_frame,
@@ -480,22 +458,26 @@ class ArcheryPredictionGUI:
 	def load_historical_data(self):
 		"""Load and display historical scores for the selected archer."""
 		self._update_status('Loading historical scores...')
+		round: str | None = None if (temp_round := self._get_round()) == 'All' else temp_round
 
 		try:
 			if self.data_manager.usingDB:
-				round: str | None = None if (temp_round := self._get_round()) == 'All' else temp_round
-				archer_data = self.data_manager.get_archer_data_from_db(
-					self._get_firstname(),
-					self._get_lastname(),
-					self._get_birthyear(),
+				firstname = self._get_firstname()
+				lastname = self._get_lastname()
+				birthyear = self._get_birthyear()
+				archer_data = self.data_manager.get_fractional_scores_from_db(
+					firstname,
+					lastname,
+					birthyear,
 					round
 				)
+
 				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID].iloc[0])
 
 			else:
 				try:
 					archer_id = int(self._get_firstname())
-					archer_data = self.data_manager.get_archer_data_from_csv(archer_id)
+					archer_data = self.data_manager.get_fractional_scores_from_csv(archer_id)
 				except ValueError as e:
 					error_msg = f'Error parsing id: {e}'
 					print(error_msg)
@@ -505,6 +487,12 @@ class ArcheryPredictionGUI:
 			if archer_data.empty:
 				self._update_status(f'No data found for archer {archer_id}', 'red')
 				return
+
+			# If a round is selected, denormalise the data
+			if round is not None:
+				round_data = self.data_manager.get_round_info()
+				max_score = round_data[round_data[shared.COLUMN_ROUND_NAME] == round][shared.COLUMN_MAX_SCORE].iloc[0]
+				archer_data[shared.COLUMN_SCORE] = archer_data[shared.COLUMN_SCORE] * max_score
 
 			self.plot_manager.plot_historical_data(
 				archer_data,
@@ -530,6 +518,7 @@ class ArcheryPredictionGUI:
 	def calculate_prediction(self):
 		"""Calculate and display prediction for the selected archer."""
 		self._update_status('Calculating prediction...')
+		round: str | None = None if (temp_round := self._get_round()) == 'All' else temp_round
 
 		try:
 			model_name = self._get_selected_model()
@@ -541,15 +530,14 @@ class ArcheryPredictionGUI:
 				firstname = self._get_firstname()
 				lastname = self._get_lastname()
 				birthyear = self._get_birthyear()
-				round: str | None = None if (temp_round := self._get_round()) == 'All' else temp_round
-				archer_data = self.data_manager.get_archer_data_from_db(
+				archer_data = self.data_manager.get_fractional_scores_from_db(
 					firstname,
 					lastname,
 					birthyear,
 					round
 				)
 				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID].iloc[0])
-				recent_scores = self.data_manager.get_recent_scores_from_db(
+				recent_scores = self.data_manager.get_recent_fractional_scores_from_db(
 					firstname,
 					lastname,
 					birthyear,
@@ -558,8 +546,8 @@ class ArcheryPredictionGUI:
 			else:
 				try:
 					archer_id = int(self._get_firstname())
-					archer_data = self.data_manager.get_archer_data_from_csv(archer_id)
-					recent_scores = self.data_manager.get_recent_scores_from_csv(archer_id)
+					archer_data = self.data_manager.get_fractional_scores_from_csv(archer_id)
+					recent_scores = self.data_manager.get_recent_fractional_scores_from_csv(archer_id)
 				except ValueError as e:
 					error_msg = f'Error parsing id: {e}'
 					print(error_msg)
@@ -572,6 +560,14 @@ class ArcheryPredictionGUI:
 
 			predictor = self.model_manager.get_predictor(model_name)
 			predicted_score = predictor.predict_score(archer_id, recent_scores)
+
+			# If a round is selected, denormalise the data
+			if round is not None:
+				round_data = self.data_manager.get_round_info()
+				max_score = round_data[round_data[shared.COLUMN_ROUND_NAME] == round][shared.COLUMN_MAX_SCORE].iloc[0]
+				archer_data[shared.COLUMN_SCORE] = archer_data[shared.COLUMN_SCORE] * max_score
+				recent_scores *= max_score
+				predicted_score *= max_score
 
 			# Update plot
 			self.plot_manager.plot_with_prediction(

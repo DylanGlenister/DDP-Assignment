@@ -56,7 +56,7 @@ class DB_Retriever:
 		empty_df = pd.DataFrame(columns=[
 			shared.COLUMN_ARCHER_ID,
 			shared.COLUMN_DATE,
-			shared.COLUMN_TOTAL_SCORE,
+			shared.COLUMN_SCORE,
 			shared.COLUMN_ROUND
 		])
 
@@ -104,7 +104,7 @@ class DB_Retriever:
 			output = pd.DataFrame(total_scores, columns=[
 				shared.COLUMN_ARCHER_ID,
 				shared.COLUMN_DATE,
-				shared.COLUMN_TOTAL_SCORE,
+				shared.COLUMN_SCORE,
 				shared.COLUMN_ROUND
 			])
 
@@ -196,7 +196,7 @@ class DB_Retriever:
 		empty_df = pd.DataFrame(columns=[
 			shared.COLUMN_ARCHER_ID,
 			shared.COLUMN_DATE,
-			shared.COLUMN_SCORE_FRACTION
+			shared.COLUMN_SCORE
 		])
 
 		try:
@@ -229,15 +229,15 @@ class DB_Retriever:
 
 			# Map max scores and calculate fractions
 			valid_scores['max_score'] = valid_scores[shared.COLUMN_ROUND].map(max_scores_dict)
-			valid_scores[shared.COLUMN_SCORE_FRACTION] = (
-				valid_scores[shared.COLUMN_TOTAL_SCORE] / valid_scores['max_score']
+			valid_scores[shared.COLUMN_SCORE] = (
+				valid_scores[shared.COLUMN_SCORE] / valid_scores['max_score']
 			).astype(float)
 
 			# Return only the required columns
 			output = valid_scores[[
 				shared.COLUMN_ARCHER_ID,
 				shared.COLUMN_DATE,
-				shared.COLUMN_SCORE_FRACTION
+				shared.COLUMN_SCORE
 			]].copy()
 
 			return output

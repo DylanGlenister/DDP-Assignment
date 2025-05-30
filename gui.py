@@ -75,7 +75,46 @@ class DataManager:
 
 	def get_round_names(self) -> list[str]:
 		"""Get the names of all of the available rounds."""
-		return self.dbRetriever.get_round_info()[shared.COLUMN_ROUND_NAME].tolist()
+		if self.usingDB:
+			return self.dbRetriever.get_round_info()[shared.COLUMN_ROUND_NAME].tolist()
+		else:
+			# If the database isn't being used, return this cached version
+			return [
+				'WA90/1440',
+				'WA70/1440',
+				'WA60/1440',
+				'AA50/1440',
+				'AA40/1440',
+				'WA70/720',
+				'WA60/720',
+				'WA50/720',
+				'Canberra',
+				'Long Sydney',
+				'Sydney',
+				'Long Brisbane',
+				'Brisbane',
+				'Adelaide',
+				'Short Adelaide',
+				'Hobart',
+				'Perth',
+				'Short Canberra',
+				'Junior Canberra',
+				'Mini Canberra',
+				'Grange',
+				'Melbourne',
+				'Darwin',
+				'Geelong',
+				'Newcastle',
+				'Holt',
+				'Samford',
+				'Drake',
+				'Wollongong',
+				'Townsville',
+				'Launceston',
+				'Full Spread'
+			]
+
+	# === Data from DB ===
 
 	def get_archer_data_from_db(
 		self,
@@ -90,11 +129,6 @@ class DataManager:
 			_lastname,
 			_birthyear
 		).sort_values(shared.COLUMN_DATE)
-
-	def get_archer_data_from_csv(self, _archer_id: int) -> pd.DataFrame:
-		"""Get all data for a specific archer, sorted by date."""
-		assert(not self.usingDB)
-		return self.data[self.data[shared.COLUMN_ARCHER_ID] == _archer_id].sort_values(shared.COLUMN_DATE)
 
 	def get_recent_scores_from_db(
 		self,
@@ -111,6 +145,13 @@ class DataManager:
 			_birthyear
 		)
 		return archer_data[shared.COLUMN_SCORE_FRACTION].tail(_sequence_length).to_list()
+
+	# === Data from CSV ===
+
+	def get_archer_data_from_csv(self, _archer_id: int) -> pd.DataFrame:
+		"""Get all data for a specific archer, sorted by date."""
+		assert(not self.usingDB)
+		return self.data[self.data[shared.COLUMN_ARCHER_ID] == _archer_id].sort_values(shared.COLUMN_DATE)
 
 	def get_recent_scores_from_csv(
 		self,
@@ -296,7 +337,7 @@ class ArcheryPredictionGUI:
 	def _setup_graph(self, _parent):
 		"""Setup the matplotlib graph area."""
 		graph_frame = tk.Frame(_parent)
-		graph_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+		graph_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 0))
 
 		fig = Figure(figsize=(8, 6), dpi=100)
 		canvas = FigureCanvasTkAgg(fig, master=graph_frame)
@@ -311,70 +352,57 @@ class ArcheryPredictionGUI:
 		input_frame = tk.Frame(_parent)
 		input_frame.pack(fill=tk.X, pady=5)
 
-		if self.data_manager.usingDB:
-			# Firstname entry box
-			firstname_frame = tk.Frame(input_frame)
-			firstname_frame.pack(pady=2)
-			tk.Label(
-				firstname_frame,
-				text='Enter firstname:',
-				anchor=tk.W, width=15
-			).pack(side=tk.LEFT, padx=(20, 10))
-			self.firstname_entry = tk.Entry(firstname_frame)
-			self.firstname_entry.pack(side=tk.LEFT)
-			self.firstname_entry.focus()
+		# Firstname entry box
+		firstname_frame = tk.Frame(input_frame)
+		firstname_frame.pack(pady=2)
+		tk.Label(
+			firstname_frame,
+			text='Enter firstname:',
+			anchor=tk.W, width=15
+		).pack(side=tk.LEFT, padx=(20, 10))
+		self.firstname_entry = tk.Entry(firstname_frame)
+		self.firstname_entry.pack(side=tk.LEFT)
+		self.firstname_entry.focus()
 
-			# Lastname entry box
-			lastname_frame = tk.Frame(input_frame)
-			lastname_frame.pack(pady=2)
-			tk.Label(
-				lastname_frame,
-				text='Enter lastname:',
-				anchor=tk.W, width=15
-			).pack(side=tk.LEFT, padx=(20, 10))
-			self.lastname_entry = tk.Entry(lastname_frame)
-			self.lastname_entry.pack(side=tk.LEFT)
+		# Lastname entry box
+		lastname_frame = tk.Frame(input_frame)
+		lastname_frame.pack(pady=2)
+		tk.Label(
+			lastname_frame,
+			text='Enter lastname:',
+			anchor=tk.W, width=15
+		).pack(side=tk.LEFT, padx=(20, 10))
+		self.lastname_entry = tk.Entry(lastname_frame)
+		self.lastname_entry.pack(side=tk.LEFT)
 
-			# Year of birth selection
-			birthyear_frame = tk.Frame(input_frame)
-			birthyear_frame.pack(pady=2)
-			tk.Label(
-				birthyear_frame,
-				text='Enter birthyear:',
-				anchor=tk.W, width=15
-			).pack(side=tk.LEFT, padx=(20, 10))
-			self.birthyear_combo = ttk.Combobox(
-				birthyear_frame,
-				values=[str(i) for i in range(1900, 2025)]
-			)
-			self.birthyear_combo.pack(side=tk.LEFT)
+		# Year of birth selection
+		birthyear_frame = tk.Frame(input_frame)
+		birthyear_frame.pack(pady=2)
+		tk.Label(
+			birthyear_frame,
+			text='Enter birthyear:',
+			anchor=tk.W, width=15
+		).pack(side=tk.LEFT, padx=(20, 10))
+		self.birthyear_combo = ttk.Combobox(
+			birthyear_frame,
+			values=[str(i) for i in range(1900, 2025)]
+		)
+		self.birthyear_combo.pack(side=tk.LEFT)
 
-			# Round selection
-			round_frame = tk.Frame(input_frame)
-			round_frame.pack(pady=2)
-			tk.Label(
-				round_frame,
-				text='Select round:',
-				anchor=tk.W, width=15
-			).pack(side=tk.LEFT, padx=(20, 10))
-			self.round_combo = ttk.Combobox(
-				round_frame,
-				values=self.data_manager.get_round_names()
-			)
-			self.round_combo.current(0)
-			self.round_combo.pack(side=tk.LEFT)
-		else:
-			# Archer selection
-			archer_frame = tk.Frame(input_frame)
-			archer_frame.pack(pady=2)
-			tk.Label(
-				archer_frame,
-				text='Select archer:',
-				anchor=tk.W, width=15
-			).pack(side=tk.LEFT, padx=(20, 10))
-			self.archer_combo = ttk.Combobox(archer_frame, values=self.data_manager.archer_ids)
-			self.archer_combo.current(0)
-			self.archer_combo.pack(side=tk.LEFT)
+		# Round selection
+		round_frame = tk.Frame(input_frame)
+		round_frame.pack(pady=2)
+		tk.Label(
+			round_frame,
+			text='Select round:',
+			anchor=tk.W, width=15
+		).pack(side=tk.LEFT, padx=(20, 10))
+		self.round_combo = ttk.Combobox(
+			round_frame,
+			values=self.data_manager.get_round_names()
+		)
+		self.round_combo.current(0)
+		self.round_combo.pack(side=tk.LEFT)
 
 		# Model selection
 		model_frame = tk.Frame(input_frame)
@@ -441,12 +469,6 @@ class ArcheryPredictionGUI:
 		"""Get the currently selected round."""
 		return self.round_combo.get()
 
-	def _get_selected_archer(self) -> int:
-		"""Get the currently selected archer ID.
-		Archer combobox not available when using db"""
-		assert(not self.data_manager.usingDB)
-		return int(self.archer_combo.get())
-
 	def _get_selected_model(self) -> str:
 		"""Get the currently selected model name."""
 		return self.model_combo.get()
@@ -463,9 +485,16 @@ class ArcheryPredictionGUI:
 					self._get_birthyear()
 				)
 				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID][0])
+
 			else:
-				archer_id = self._get_selected_archer()
-				archer_data = self.data_manager.get_archer_data_from_csv(archer_id)
+				try:
+					archer_id = int(self._get_firstname())
+					archer_data = self.data_manager.get_archer_data_from_csv(archer_id)
+				except ValueError as e:
+					error_msg = f'Error parsing id: {e}'
+					print(error_msg)
+					self._update_status(error_msg, 'red')
+					return
 
 			if archer_data.empty:
 				self._update_status(f'No data found for archer {archer_id}', 'red')
@@ -477,6 +506,16 @@ class ArcheryPredictionGUI:
 			)
 			self._update_status('Historical scores loaded successfully', 'green')
 
+		except ValueError as e:
+			error_msg = f'Error loading historical data: incorrect data entered'
+			print(error_msg)
+			self._update_status(error_msg, 'red')
+
+		except KeyError as e:
+			error_msg = f'Error loading historical data: No archer matching these details found'
+			print(error_msg)
+			self._update_status(error_msg, 'red')
+
 		except Exception as e:
 			error_msg = f'Error loading historical data: {e}'
 			print(error_msg)
@@ -484,9 +523,9 @@ class ArcheryPredictionGUI:
 
 	def calculate_prediction(self):
 		"""Calculate and display prediction for the selected archer."""
-		try:
-			self._update_status('Calculating prediction...')
+		self._update_status('Calculating prediction...')
 
+		try:
 			model_name = self._get_selected_model()
 			if not model_name:
 				self._update_status('No model selected', 'red')
@@ -505,9 +544,15 @@ class ArcheryPredictionGUI:
 					self._get_birthyear()
 				)
 			else:
-				archer_id = self._get_selected_archer()
-				archer_data = self.data_manager.get_archer_data_from_csv(archer_id)
-				recent_scores = self.data_manager.get_recent_scores_from_csv(archer_id)
+				try:
+					archer_id = int(self._get_firstname())
+					archer_data = self.data_manager.get_archer_data_from_csv(archer_id)
+					recent_scores = self.data_manager.get_recent_scores_from_csv(archer_id)
+				except ValueError as e:
+					error_msg = f'Error parsing id: {e}'
+					print(error_msg)
+					self._update_status(error_msg, 'red')
+					return
 
 			if not recent_scores:
 				self._update_status(f'No score data available for archer {archer_id}', 'red')
@@ -527,6 +572,16 @@ class ArcheryPredictionGUI:
 			success_msg = f'Prediction complete: {predicted_score:.4f} (using {model_name} model)'
 			print(success_msg)
 			self._update_status(success_msg, 'green')
+
+		except ValueError as e:
+			error_msg = f'Error calculating prediction: incorrect data entered'
+			print(error_msg)
+			self._update_status(error_msg, 'red')
+
+		except KeyError as e:
+			error_msg = f'Error calculating prediction: No archer matching these details found'
+			print(error_msg)
+			self._update_status(error_msg, 'red')
 
 		except Exception as e:
 			error_msg = f'Error calculating prediction: {e}'

@@ -399,9 +399,11 @@ class ArcheryPredictionGUI:
 			text='Select round:',
 			anchor=tk.W, width=15
 		).pack(side=tk.LEFT, padx=(20, 10))
+		round_values = self.data_manager.get_round_names()
+		round_values.insert(0, 'All')
 		self.round_combo = ttk.Combobox(
 			round_frame,
-			values=self.data_manager.get_round_names()
+			values=round_values
 		)
 		self.round_combo.current(0)
 		self.round_combo.pack(side=tk.LEFT)
@@ -481,13 +483,14 @@ class ArcheryPredictionGUI:
 
 		try:
 			if self.data_manager.usingDB:
+				round: str | None = None if (temp_round := self._get_round()) == 'All' else temp_round
 				archer_data = self.data_manager.get_archer_data_from_db(
 					self._get_firstname(),
 					self._get_lastname(),
 					self._get_birthyear(),
-					self._get_round()
+					round
 				)
-				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID][0])
+				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID].iloc[0])
 
 			else:
 				try:
@@ -538,14 +541,14 @@ class ArcheryPredictionGUI:
 				firstname = self._get_firstname()
 				lastname = self._get_lastname()
 				birthyear = self._get_birthyear()
-				round = self._get_round()
+				round: str | None = None if (temp_round := self._get_round()) == 'All' else temp_round
 				archer_data = self.data_manager.get_archer_data_from_db(
 					firstname,
 					lastname,
 					birthyear,
 					round
 				)
-				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID][0])
+				archer_id = int(archer_data[shared.COLUMN_ARCHER_ID].iloc[0])
 				recent_scores = self.data_manager.get_recent_scores_from_db(
 					firstname,
 					lastname,

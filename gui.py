@@ -219,7 +219,7 @@ class PlotManager:
 		self,
 		_archer_data: pd.DataFrame,
 		_archer_id: int,
-		_predicted_score: float,
+		_predicted_score: float | int,
 		_model_name: str
 	):
 		"""Plot historical data with prediction."""
@@ -261,15 +261,26 @@ class PlotManager:
 			linewidth=2
 		)
 
-		# Annotation
-		plot.annotate(
-			f'Predicted: {_predicted_score:.4f}',
-			xy=(current_date, _predicted_score),  # type: ignore
-			xytext=(10, 10),
-			textcoords='offset points',
-			bbox=dict(boxstyle='round,pad=0.3', facecolor='red', alpha=0.3),
-			arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
-		)
+		if isinstance(_predicted_score, float):
+			# Annotation
+			plot.annotate(
+				f'Predicted: {_predicted_score:.4f}',
+				xy=(current_date, _predicted_score),  # type: ignore
+				xytext=(10, 10),
+				textcoords='offset points',
+				bbox=dict(boxstyle='round,pad=0.3', facecolor='red', alpha=0.3),
+				arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
+			)
+		else:
+			# Annotation
+			plot.annotate(
+				f'Predicted: {_predicted_score}',
+				xy=(current_date, _predicted_score),  # type: ignore
+				xytext=(10, 10),
+				textcoords='offset points',
+				bbox=dict(boxstyle='round,pad=0.3', facecolor='red', alpha=0.3),
+				arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
+			)
 
 		title = f'Archery Scores - Historical Data + {_model_name} Prediction'
 		self._setup_plot(plot, title)
@@ -567,7 +578,7 @@ class ArcheryPredictionGUI:
 				max_score = round_data[round_data[shared.COLUMN_ROUND_NAME] == round][shared.COLUMN_MAX_SCORE].iloc[0]
 				archer_data[shared.COLUMN_SCORE] = archer_data[shared.COLUMN_SCORE] * max_score
 				recent_scores *= max_score
-				predicted_score *= max_score
+				predicted_score = int(predicted_score * max_score)
 
 			# Update plot
 			self.plot_manager.plot_with_prediction(
